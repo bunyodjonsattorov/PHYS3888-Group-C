@@ -465,8 +465,17 @@ def render_benchmark(df, key, test_size, note=None):
                        expanded=True) as status:
             bar = st.progress(0.0, text=f"Starting the first of {len(plan)} steps...")
             timing = st.empty()
-            results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size,
-                                    on_progress=make_progress_reporter(plan, bar, timing, started))
+            try:
+                results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size,
+                                        on_progress=make_progress_reporter(plan, bar, timing, started))
+            except Exception:
+                # Reachable: a CSV of 8-sample records parses and then makes MiniRocket
+                # raise (n_timepoints must be >= 9). Streamlit already flips the box to
+                # its error state when the exception leaves this block, so the label is
+                # the part worth setting -- it would otherwise still read "Running
+                # Rocket, MiniRocket, catch22 and DTW (N steps)..." beneath a red icon.
+                status.update(label="Benchmark failed", state="error")
+                raise
             elapsed = describe_duration(time.time() - started)
             bar.progress(1.0, text=f"All {len(plan)} steps finished")
             timing.caption(f"Elapsed {elapsed}.")
