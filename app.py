@@ -43,6 +43,12 @@ except ImportError:
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
 
+# The two conditions the app accepts, and the algorithms the benchmark runs. The
+# benchmark and the progress bar both step through these, in this order, so the
+# bar's plan and the work actually done cannot drift apart.
+CONDITIONS = ("Constant Parameter", "Non-Stationary")
+ALGORITHMS = ("Rocket", "MiniRocket", "catch22", "DTW")
+
 
 # ==========================================
 # 1. CSV PARSING
@@ -176,11 +182,18 @@ def evaluate_catch22(X_train, X_test, y_train, y_test):
     return accuracy_score(y_test, preds), time.time() - start_time
 
 
-def evaluate_dtw(X_train, X_test, y_train, y_test):
+def evaluate_dtw(X_train, X_test, y_train, y_test, on_test_row=None):
+    """1-NN under DTW.
+
+    ``on_test_row(scored, total)``, when given, is called after each test series
+    is scored. DTW is by far the slowest algorithm here, so this is the only way
+    a progress bar can move *within* one of its steps rather than sitting still
+    for minutes.
+    """
     start_time = time.time()
     preds = []
 
-    for test_row in X_test:
+    for scored, test_row in enumerate(X_test, start=1):
         best_dist = float('inf')
         best_label = 0
         for train_row, label in zip(X_train, y_train):
@@ -193,6 +206,8 @@ def evaluate_dtw(X_train, X_test, y_train, y_test):
                 best_dist = dist
                 best_label = label
         preds.append(best_label)
+        if on_test_row is not None:
+            on_test_row(scored, len(X_test))
 
     return accuracy_score(y_test, preds), time.time() - start_time
 
@@ -272,26 +287,113 @@ def module_frame(info):
 # ==========================================
 # 4. BENCHMARK
 # ==========================================
-def run_benchmark(stat_data, non_stat_data, num_datasets, test_size):
-    """Score all four algorithms on the first num_datasets of each condition."""
+def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress=None):
+    """Score all four algorithms on the first num_datasets of each condition.
+
+    One step is one algorithm on one dataset, so a run is
+    ``num_datasets * len(CONDITIONS) * len(ALGORITHMS)`` steps in total.
+
+    ``on_progress(completed, total, label, seconds)``, when given, is called as
+    the run advances: before each step with ``seconds=None``, after each step with
+    the time it took, and during a DTW step with a fractional ``completed`` as it
+    scores test series. ``label`` describes the work in progress, so a caller can
+    show what is running and how long the rest will take.
+    """
+    total = num_datasets * len(CONDITIONS) * len(ALGORITHMS)
+    completed = 0
     results = []
     for i in range(num_datasets):
-        for condition, data in (("Constant Parameter", stat_data),
-                                ("Non-Stationary", non_stat_data)):
+        for condition, data in zip(CONDITIONS, (stat_data, non_stat_data)):
             X, y = data[i]
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=i)
 
-            for name, run in (
-                ("Rocket", lambda: evaluate_rocket(X_train, X_test, y_train, y_test, mini=False)),
-                ("MiniRocket", lambda: evaluate_rocket(X_train, X_test, y_train, y_test, mini=True)),
-                ("catch22", lambda: evaluate_catch22(X_train, X_test, y_train, y_test)),
-                ("DTW", lambda: evaluate_dtw(X_train, X_test, y_train, y_test)),
-            ):
-                acc, elapsed = run()
+            label = f"Dataset {i + 1} of {num_datasets} · {condition}"
+
+            def report_dtw_row(scored, rows, _label=label):
+                # The last row needs no update of its own: the completion callback
+                # that follows carries the same value. Leaving it out keeps
+                # ``completed`` fractional for every in-step update, so a whole
+                # number with no time always means "this step is starting".
+                if on_progress is not None and scored < rows:
+                    on_progress(completed + scored / rows, total,
+                                f"{_label} · DTW · {scored} of {rows} test series", None)
+
+            # Indexed by name so the loop below runs exactly ALGORITHMS, which is
+            # the order the progress bar's plan counts.
+            runners = {
+                "Rocket": lambda: evaluate_rocket(X_train, X_test, y_train, y_test, mini=False),
+                "MiniRocket": lambda: evaluate_rocket(X_train, X_test, y_train, y_test, mini=True),
+                "catch22": lambda: evaluate_catch22(X_train, X_test, y_train, y_test),
+                "DTW": lambda: evaluate_dtw(X_train, X_test, y_train, y_test,
+                                            on_test_row=report_dtw_row),
+            }
+
+            for name in ALGORITHMS:
+                step = f"{label} · {name}"
+                if on_progress is not None:
+                    on_progress(completed, total, step, None)
+                acc, elapsed = runners[name]()
                 results.append({"Dataset": i + 1, "Condition": condition,
                                 "Algorithm": name, "Accuracy": acc, "Time (s)": elapsed})
+                completed += 1
+                if on_progress is not None:
+                    on_progress(completed, total, step, elapsed)
     return pd.DataFrame(results)
+
+
+def describe_duration(seconds):
+    """A duration as '2h 5m', '3m 12s' or '14s' -- long runs need the hours."""
+    total = int(round(max(seconds, 0.0)))
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def run_benchmark_plan(num_datasets):
+    """The steps run_benchmark will take, in order: (dataset number, condition, algorithm)."""
+    return [(i + 1, condition, name)
+            for i in range(num_datasets)
+            for condition in CONDITIONS
+            for name in ALGORITHMS]
+
+
+def make_progress_reporter(plan, bar, timing, started):
+    """Draw the progress bar, the running step and the elapsed/remaining caption.
+
+    Returns the callback handed to run_benchmark. ``plan`` gives the step order,
+    which is both what the caption counts and what the remaining-time estimate
+    adds up.
+    """
+    total = len(plan)
+    observed = {}   # algorithm -> its finished step durations, for the estimate
+
+    def report(completed, _total, label, seconds):
+        if seconds is not None:
+            # A completed step, so this is the algorithm that just finished. The
+            # fractional updates inside a DTW step report no time and are not
+            # charged as done work here.
+            observed.setdefault(plan[int(completed) - 1][2], []).append(seconds)
+
+        bar.progress(min(completed / total, 1.0),
+                     text=f"{label} ({int(completed)} of {total} steps)")
+
+        # Only estimate once every algorithm has a measured step: before the first
+        # DTW has finished, an estimate would price the remaining DTW steps at the
+        # cost of the Rocket ones and promise minutes for an hour of work.
+        means = {name: sum(times) / len(times) for name, times in observed.items() if times}
+        if len(means) == len(ALGORITHMS):
+            remaining = sum(means[name] for _, _, name in plan[int(completed):])
+            left = f" · about {describe_duration(remaining)} left"
+        else:
+            left = " · estimating the remaining time"
+        timing.caption(f"Elapsed {describe_duration(time.time() - started)}{left}.")
+
+    return report
 
 
 def show_results(df_results):
@@ -355,8 +457,21 @@ def render_benchmark(df, key, test_size, note=None):
                                  1, max_available, max_available, key=f"{key}:n")
 
     if st.button("Execute Benchmark", type="primary", use_container_width=True, key=f"{key}:run"):
-        with st.spinner("Running Rocket, MiniRocket, catch22 and DTW..."):
-            results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size)
+        # One step per algorithm per dataset, and a real bar over them: the spinner
+        # this replaces showed nothing for up to an hour on the fractal module.
+        plan = run_benchmark_plan(num_datasets)
+        started = time.time()
+        with st.status(f"Running Rocket, MiniRocket, catch22 and DTW ({len(plan)} steps)...",
+                       expanded=True) as status:
+            bar = st.progress(0.0, text=f"Starting the first of {len(plan)} steps...")
+            timing = st.empty()
+            results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size,
+                                    on_progress=make_progress_reporter(plan, bar, timing, started))
+            elapsed = describe_duration(time.time() - started)
+            bar.progress(1.0, text=f"All {len(plan)} steps finished")
+            timing.caption(f"Elapsed {elapsed}.")
+            status.update(label=f"Benchmark complete: {len(plan)} steps in {elapsed}",
+                          state="complete")
         show_results(results)
 
 

@@ -69,6 +69,14 @@ runtime while the other three finish almost instantly. On the fractal module's
 ten-dataset run takes about an hour. The dataset slider is the dial for that: one
 or two gives a quick look, ten gives the steadiest answer.
 
+While a run is going the app shows a progress bar over one step per algorithm per
+dataset, naming the dataset, condition and algorithm in flight, with the elapsed
+time and an estimate of what is left. The estimate appears once every algorithm
+has been measured, because until a first DTW has finished there is nothing to
+price the remaining DTW steps against. DTW also reports how many test series it
+has scored, so the bar keeps moving through its share rather than stalling for
+minutes at a time.
+
 That fractal CSV is about 10 MB, which is what ten blocks of 1024-sample records
 cost on disk. `PER_CONDITION` in its `main.py` is the single number to change if
 that trade is not worth making.
