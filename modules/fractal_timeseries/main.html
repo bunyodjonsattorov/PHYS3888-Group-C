@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Exponent-dispersion label: how the construction is built</title>
+<title>How the exponent-dispersion label is built</title>
 <style>
 :root{
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -65,15 +65,17 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:4px;padding:1
 <div class="wrap">
 
 <h1>How the exponent-dispersion label is built</h1>
-<p class="lede">This label is <b>one-channel</b>, fractal, non-parity, non-reversal and
-<b>non-sign</b>, and ROCKET cannot see it. Every number below comes from the project's own code.</p>
+<p class="lede">One univariate record per label, built on self-affine noise. Class&nbsp;0 holds the
+local roughness exponent fixed, class&nbsp;1 lets it vary along the record, and that is enough to leave
+the two classes with the same marginals and to put ROCKET at chance. Every figure and table below is
+drawn from the values embedded in this file.</p>
 
-<!-- ============ 1. RECIPE ============ -->
+<!-- ============ 1. THE TWO SERIES ============ -->
 <div class="card">
-<h2>1. The recipe: two ingredients, one dial</h2>
-<p>Sample two independent fractal noises: a <b>rough</b> one (<span class="mono">H = 0.4</span>) and a
-<b>smooth</b> one (<span class="mono">H = 0.9</span>). Normalise each to unit variance, blend them
-sample by sample with a dial <span class="mono">&theta;(t)</span>, then integrate to get the record.</p>
+<h2>1. The two series being mixed</h2>
+<p>Draw two independent fractional Gaussian noises, one at <span class="mono">H = 0.4</span> and one at
+<span class="mono">H = 0.9</span>, and scale each to unit variance. Mix them sample by sample at an
+angle <span class="mono">&theta;(t)</span>, then cumulatively sum the result to get the record.</p>
 
 <div class="flow">
   <span class="stack">
@@ -88,95 +90,96 @@ sample by sample with a dial <span class="mono">&theta;(t)</span>, then integrat
 
 <div class="grid2">
   <div>
-    <h3 style="color:var(--rough)">Rough ingredient r &nbsp;<span class="mono" style="text-transform:none">H=0.4</span></h3>
+    <h3 style="color:var(--rough)">r &nbsp;<span class="mono" style="text-transform:none">H = 0.4, rough</span></h3>
     <canvas id="c-r"></canvas>
   </div>
   <div>
-    <h3 style="color:var(--smooth)">Smooth ingredient s &nbsp;<span class="mono" style="text-transform:none">H=0.9</span></h3>
+    <h3 style="color:var(--smooth)">s &nbsp;<span class="mono" style="text-transform:none">H = 0.9, smooth</span></h3>
     <canvas id="c-s"></canvas>
   </div>
 </div>
 <p class="cap" id="cap-rs"></p>
 </div>
 
-<!-- ============ 2. THE DIAL ============ -->
+<!-- ============ 2. THE TWO CLASSES ============ -->
 <div class="card">
-<h2>2. The dial is the only thing that differs</h2>
-<p>Both classes use the <i>same</i> two ingredients. They differ only in how the dial moves:</p>
+<h2>2. What separates the two classes</h2>
+<p>Both classes mix the same two series at the same amplitudes. Only <span class="mono">&theta;(t)</span>
+differs:</p>
 <table>
-  <tr><th>class</th><th>dial &theta;(t)</th><th>meaning</th></tr>
+  <tr><th>class</th><th>&theta;(t)</th><th>the mix</th></tr>
   <tr><td class="mono">0</td>
       <td class="mono">&theta; = &pi;/4 &nbsp;(constant)</td>
-      <td>a fixed 50/50 blend: <b>one roughness everywhere</b></td></tr>
+      <td>a fixed 50/50 mix, so the roughness is the same everywhere in the record</td></tr>
   <tr><td class="mono">1</td>
       <td class="mono">&theta; = &pi;/4 + 0.7&thinsp;c(t)</td>
-      <td>the blend drifts, so <b>the local roughness varies along the record</b></td></tr>
+      <td>the mix drifts, so the local roughness varies along the record</td></tr>
 </table>
-<p><span class="mono">c(t)</span> is a smooth, zero-mean control field, so class&nbsp;1 wanders
-<i>around</i> the same &pi;/4 the class&nbsp;0 record sits at. The dial never changes the
-<i>amount</i> of local activity, only its <i>texture</i>:</p>
+<p><span class="mono">c(t)</span> is a smooth zero-mean field, so class&nbsp;1 stays near the &pi;/4 that
+class&nbsp;0 fixes. &theta; sets how the variance is split between the two series, not how much variance
+there is:</p>
 
 <div class="eq">x(t) = cos&thinsp;&theta;(t)&middot;r(t) + sin&thinsp;&theta;(t)&middot;s(t)
 
 <b>cos&sup2;&theta; + sin&sup2;&theta; = 1</b>  &rArr;  Var[x(t)] = 1 <span style="color:#64748b">for every t, in both classes</span></div>
 
-<p>Every sample is Gaussian with variance exactly&nbsp;1, whatever the dial is
-doing, so the two classes have an <b>identical marginal distribution</b>: same variance, same
-kurtosis, same spectrum. In the figure below the two shaded bands change shape, but they always
-add up to the same total height.</p>
+<p>Every sample is Gaussian with variance exactly&nbsp;1 whatever &theta; is doing, so the two classes
+have <b>identical marginals</b>: same variance, same kurtosis, same spectrum. In the figure below the two
+bands change shape but always sum to the same height.</p>
 
-<h3>Share of variance from each ingredient, over time</h3>
+<h3>Variance share of each series over time</h3>
 <div class="legend">
-  <span><i style="background:var(--rough)"></i>cos&sup2;&theta;: rough share</span>
-  <span><i style="background:var(--smooth)"></i>sin&sup2;&theta;: smooth share</span>
-  <span><i style="background:#94a3b8"></i>total: always 1.0</span>
+  <span><i style="background:var(--rough)"></i>cos&sup2;&theta; (the H = 0.4 series)</span>
+  <span><i style="background:var(--smooth)"></i>sin&sup2;&theta; (the H = 0.9 series)</span>
+  <span><i style="background:#94a3b8"></i>sum (always 1.0)</span>
 </div>
 <canvas id="c-share"></canvas>
-<p class="cap">Top: class&nbsp;0, the split frozen at 50/50. Bottom: class&nbsp;1, the split sliding,
-so the record is rough in some stretches and smooth in others. In both panels the
-<b>stacked total is pinned at 1</b>, so every marginal statistic is matched by construction.</p>
+<p class="cap">Top: class&nbsp;0, with the split fixed at 50/50. Bottom: class&nbsp;1, with the split
+moving, so the record is rough in some stretches and smooth in others. The stacked total is 1 in both
+panels, so the marginals match by construction.</p>
 </div>
 
 <!-- ============ 3. THE RECORDS ============ -->
 <div class="card">
-<h2>3. What the two records look like</h2>
-<p>Integrating <span class="mono">x(t)</span> gives the record the classifier receives. The panels
-below show the record's <b>increments</b> rather than the running sum: at 1024 samples the sum is
-dominated by the smooth ingredient's drift and its local texture is invisible at that scale. The sum is
-what gets classified, and it looks like a slow random drift either way.</p>
+<h2>3. The records</h2>
+<p>Cumulatively summing <span class="mono">x(t)</span> gives the record the classifier receives. These
+panels show the <b>increments</b> rather than the running sum, because over 1024 samples the sum is
+dominated by drift from the <span class="mono">H = 0.9</span> series and its local texture is not visible
+at that scale. The sum is what gets classified, and in both classes it looks like a slow random walk.</p>
 <div class="grid2">
   <div>
-    <h3 style="color:var(--c0)">Class 0: one texture throughout</h3>
+    <h3 style="color:var(--c0)">Class 0, one roughness throughout</h3>
     <canvas id="c-x0"></canvas>
   </div>
   <div>
-    <h3 style="color:var(--c1)">Class 1: texture varies along the record</h3>
+    <h3 style="color:var(--c1)">Class 1, roughness varying along the record</h3>
     <canvas id="c-x1"></canvas>
   </div>
 </div>
 <p class="cap" id="cap-x"></p>
 
-<h3 style="margin-top:18px">Same size, different texture</h3>
-<p>Two 200-sample stretches taken from one class&#8209;1 record: the roughest-dominated stretch and the
-smoothest-dominated stretch. Their RMS sizes are close, since the local variance is matched in
-distribution, yet their texture differs: sustained swings versus rapid sign-flipping.</p>
+<h3 style="margin-top:18px">Two stretches from one class&#8209;1 record</h3>
+<p>Two stretches of 200 samples cut from a single class&#8209;1 record, one where the
+<span class="mono">H = 0.4</span> series dominates and one where <span class="mono">H = 0.9</span> does.
+Their RMS sizes are close, because the local variance matches in distribution, but the texture differs:
+sustained swings in one, rapid sign changes in the other.</p>
 <canvas id="c-zoom"></canvas>
 <p class="cap" id="cap-zoom"></p>
 </div>
 
 <!-- ============ 4. READER ============ -->
 <div class="card">
-<h2>4. How a process-aware reader sees the label</h2>
-<p>Split the record into 8 windows. In each window, measure the local <b>roughness exponent</b> with a
-structure function: fit the slope of <span class="mono">log&thinsp;mean|&Delta;<sub>lag</sub>x|&sup2;</span>
-against <span class="mono">log&thinsp;lag</span> over lags 1, 2, 4 and 8. That gives one number per window.</p>
-<div class="eq">reader(record) = <b>std</b> of the 8 window roughness exponents   &larr; the label's decision variable</div>
-<p>For class&nbsp;0 all eight exponents agree, so the spread is small. For class&nbsp;1 they disagree,
-so the spread is large. The reader is training-free: no thresholds, no fitted parameters, no
-analyst-chosen cut.</p>
+<h2>4. Reading the label back with a window exponent</h2>
+<p>The record is split into 8 windows. In each window a structure function gives a local
+<b>roughness exponent</b>, the slope of
+<span class="mono">log&thinsp;mean|&Delta;<sub>lag</sub>x|&sup2;</span> against
+<span class="mono">log&thinsp;lag</span> fitted over lags 1, 2, 4 and 8, so one number per window.</p>
+<div class="eq">reader(record) = <b>std</b> of the 8 window roughness exponents   &larr; the decision variable</div>
+<p>In class&nbsp;0 the eight exponents agree, so their spread is small; in class&nbsp;1 they do not, so it
+is large. The reader needs no thresholds, fitted parameters or analyst-chosen cut.</p>
 <div class="grid2">
   <div>
-    <h3>Mean window roughness over 60 records</h3>
+    <h3>Mean window roughness, 60 records per class</h3>
     <div class="legend">
       <span><i style="background:var(--c0)"></i>class 0</span>
       <span><i style="background:var(--c1)"></i>class 1</span>
@@ -185,7 +188,7 @@ analyst-chosen cut.</p>
     <canvas id="c-prof"></canvas>
   </div>
   <div>
-    <h3>Reader value over 60 records per class</h3>
+    <h3>Reader value per record, 60 per class</h3>
     <div class="legend">
       <span><i style="background:var(--c0)"></i>class 0</span>
       <span><i style="background:var(--c1)"></i>class 1</span>
@@ -196,46 +199,46 @@ analyst-chosen cut.</p>
 <p class="cap" id="cap-strip"></p>
 </div>
 
-<!-- ============ 5. WHY ROCKET AND THE BATTERY ARE BLIND ============ -->
+<!-- ============ 5. ROCKET AND THE MARGINAL TESTS ============ -->
 <div class="card">
-<h2>5. Why ROCKET and the marginal battery cannot see it</h2>
-<p>ROCKET's features are linear averages of <i>how much</i> local activity a kernel sees. This label
-changes <i>what kind</i> of activity it is, at the same magnitude, so those
-magnitude-sensitive features have nothing to separate the classes on, and the two
-feature clouds overlap. The battery looks at variance, kurtosis, zero-crossings and
-autocorrelation, all matched by the <span class="mono">cos&sup2;+sin&sup2;=1</span> identity.
-The two laws are not identical (section 4 shows a reader that does see it), so this is a statement
-about detectability at this sample size, not a theorem. Both gates come out flat here:</p>
+<h2>5. ROCKET and the marginal tests</h2>
+<p>ROCKET's features are averages of <i>how much</i> local activity a kernel sees. The label changes
+<i>what kind</i> of activity it is while holding the magnitude fixed, so features of that kind have
+nothing to separate the classes on and the two clouds overlap. The marginal tests look at variance,
+kurtosis, zero-crossings and autocorrelation, all matched by the
+<span class="mono">cos&sup2;+sin&sup2;=1</span> identity. This is a statement about detectability at this
+sample size rather than a theorem, and section&nbsp;4 shows a reader that does see the difference. All
+four tests come out flat:</p>
 <div class="grid2">
   <div>
-    <h3>Local variance: matched</h3>
+    <h3>Increment variance (matched)</h3>
     <canvas id="h-var"></canvas>
   </div>
   <div>
-    <h3>Kurtosis of increments: matched</h3>
+    <h3>Excess kurtosis (matched)</h3>
     <canvas id="h-kurt"></canvas>
   </div>
 </div>
 <div class="grid2" style="margin-top:16px">
   <div>
-    <h3>Lag-1 autocorrelation of increments: matched</h3>
+    <h3>Lag-1 autocorrelation (matched)</h3>
     <canvas id="h-ac"></canvas>
   </div>
   <div>
-    <h3>Record scale (path std): matched</h3>
+    <h3>Path standard deviation (matched)</h3>
     <canvas id="h-std"></canvas>
   </div>
 </div>
 <p class="cap" id="cap-hist"></p>
 
-<h3 style="margin-top:18px">Measured gate scores</h3>
+<h3 style="margin-top:18px">Measured scores</h3>
 <div class="tscroll"><table id="tbl-gates"></table></div>
 <p class="cap" id="cap-gates"></p>
 </div>
 
-<!-- ============ 6. SCORECARD ============ -->
+<!-- ============ 6. REQUIREMENTS ============ -->
 <div class="card">
-<h2>6. Scorecard against the requirements</h2>
+<h2>6. Requirements</h2>
 <div class="tscroll"><table id="tbl-score"></table></div>
 <p class="cap" id="cap-score"></p>
 </div>
@@ -523,40 +526,39 @@ reg(()=>{
 /* ---------------- text + tables ---------------- */
 function el(id, txt){ document.getElementById(id).innerHTML = txt; }
 
-el('cap-rs', 'Both series are unit-variance fGn increments, drawn on the same vertical scale. ' +
-  'The rough ingredient flips sign constantly (lag-1 autocorrelation ' + fmt(D.ac1R,3) + '); the smooth one ' +
-  'persists (lag-1 autocorrelation ' + fmt(D.ac1S,3) + '). They are independent draws.');
+el('cap-rs', 'Both are unit-variance fGn series on the same vertical scale. The H = 0.4 series changes ' +
+  'sign from sample to sample (lag-1 autocorrelation ' + fmt(D.ac1R,3) + '); the H = 0.9 series moves ' +
+  'slowly (lag-1 autocorrelation ' + fmt(D.ac1S,3) + '). The two are independent draws.');
 
-el('cap-x', 'Both increment series are unit-variance, so their overall size matches (increment std ' +
-  'AUC ' + fmt(D.incAuc,3) + '); the running sums match too, across the dataset (mean path std ' +
-  fmt(D.pathMean0,1) + ' vs ' + fmt(D.pathMean1,1) + ', AUC ' + fmt(D.pathAuc,3) + '). What differs is ' +
-  'the <i>texture</i>: class 0\'s increments keep one roughness everywhere, class 1\'s switch between ' +
-  'jagged and persistent stretches along the record, at the same local magnitude.');
+el('cap-x', 'Both increment series have unit variance, so they match in overall size (AUC ' +
+  fmt(D.incAuc,3) + '), and so do the running sums (mean path std ' +
+  fmt(D.pathMean0,1) + ' vs ' + fmt(D.pathMean1,1) + ', AUC ' + fmt(D.pathAuc,3) + '). The difference ' +
+  'is how the roughness is arranged: class 0 keeps one roughness throughout, while class 1 alternates ' +
+  'between jagged and persistent stretches at the same local magnitude.');
 
 const pct = Math.abs(D.rmsSmooth/D.rmsRough - 1)*100;
-el('cap-zoom', 'RMS of the two stretches: ' + fmt(D.rmsRough,4) + ' (rough-dominated) vs ' +
-  fmt(D.rmsSmooth,4) + ' (smooth-dominated), close in size (a ' + fmt(pct,0) + '% gap) but ' +
-  'different in texture. That gap is ordinary window-to-window fluctuation: across all records the ' +
-  'window variance is matched at AUC ' + fmt(D.winAuc,3) + ', so it gives ROCKET and the marginal ' +
-  'battery nothing to separate on.');
+el('cap-zoom', 'RMS of the two stretches: ' + fmt(D.rmsRough,4) + ' where the H = 0.4 series dominates ' +
+  'and ' + fmt(D.rmsSmooth,4) + ' where H = 0.9 does, a gap of ' + fmt(pct,0) + '% that is ordinary ' +
+  'window-to-window fluctuation. Across all records the window variance matches at AUC ' +
+  fmt(D.winAuc,3) + ', which leaves ROCKET and the marginal tests nothing to separate.');
 
-el('cap-strip', 'Left: the mean local exponent in each window, averaged over all 60 records per ' +
-  'class, with &plusmn;1&thinsp;sd brackets. The two class <i>means</i> track each other, so the exponent\'s ' +
-  'average is matched, but class 1\'s record-to-record scatter is larger in most windows. ' +
-  'Right: the decision variable itself, the within-record spread of those exponents. Class means ' +
+el('cap-strip', 'Left: the mean local exponent in each window, averaged over the 60 records of each ' +
+  'class, with &plusmn;1&thinsp;sd brackets. The two class means track each other, so the average ' +
+  'exponent matches, but class 1 scatters more from record to record in most windows. ' +
+  'Right: the decision variable itself, the spread of those exponents within a record. Class means ' +
   fmt(D.dispMean0,4) + ' vs ' + fmt(D.dispMean1,4) + '; the distributions separate but overlap, ' +
-  'so the reader is realisable but weak (CV = ' + fmt(D.gates.readerCV,3) + ').');
+  'so the reader is workable but weak (CV = ' + fmt(D.gates.readerCV,3) + ').');
 
-el('cap-hist', 'Teal and red are the two classes. The distributions sit on top of each other: ' +
-  'increment variance, kurtosis, autocorrelation and record scale are all matched, so nothing in ' +
-  'the marginal family separates them. Two caveats: increment std is matched only to ' +
-  'AUC ' + fmt(D.incAuc,3) + ' (a slight residual, far below the 0.80 single-feature gate), and ' +
-  'record scale is matched <i>in distribution</i> rather than analytically, so each class spans ' +
-  'a wide, overlapping range.');
+el('cap-hist', 'The two colours are the two classes. The histograms overlap: increment variance, ' +
+  'kurtosis, autocorrelation and record scale all match, so nothing in this family separates the ' +
+  'classes. Two caveats: increment std matches only to AUC ' + fmt(D.incAuc,3) + ', a residual well ' +
+  'below the 0.80 single-feature gate, and record scale matches in distribution rather than ' +
+  'analytically, so both classes span a wide overlapping range.');
 
-el('cap-gates', 'Balanced accuracy from 5-fold cross-validation on 60 records per class, length 1024, ' +
-  '200 kernels per ROCKET arm. Margins are CV minus the shuffled-label null. ROCKET arms sit at or below ' +
-  'chance with negative margins; the marginal battery is flat with a non-significant family p-value.');
+el('cap-gates', 'Balanced accuracy from 5-fold cross-validation, 60 records per class, length 1024, ' +
+  '200 kernels per ROCKET arm. The margin is CV minus the shuffled-label null. The ROCKET arms sit at ' +
+  'or below chance with negative margins, and the marginal tests are flat with a non-significant ' +
+  'family p-value.');
 
 /* gates table */
 const g = D.gates;
@@ -571,8 +573,8 @@ ${g.arms.map(a=>`<tr><td>${a.name}</td><td class="mono">${fmt(a.cv,3)}</td><td c
 <tr><td>global marginal battery</td><td class="mono">${fmt(g.battery,3)}</td><td class="mono">n/a</td>
     <td class="mono">n/a</td><td class="${g.batteryP>0.05?'ok':'no'}">blind (family p = ${fmt(g.batteryP,3)})</td></tr>`;
 
-el('cap-score', 'Every requirement is met except oracle strength: the label is present and recoverable ' +
-  'in principle, but no reader so far pushes the accuracy high.');
+el('cap-score', 'Every requirement holds except reader strength: the label is recoverable in ' +
+  'principle, but no reader tried here scores well on it.');
 
 document.getElementById('tbl-score').innerHTML = `
 <tr><th>requirement</th><th>status</th><th>evidence</th></tr>
@@ -584,24 +586,24 @@ document.getElementById('tbl-score').innerHTML = `
 <tr><td>not a time reversal</td><td class="ok">met</td><td>no record is reversed or mirrored</td></tr>
 <tr><td>not a parity / count</td><td class="ok">met</td><td>no counting, no modulo</td></tr>
 <tr><td>not a sign</td><td class="ok">met</td>
-    <td>the label is a <b>dispersion</b> (a magnitude of heterogeneity), not a direction</td></tr>
+    <td>the label is a <b>dispersion</b>, a magnitude of heterogeneity, not a direction</td></tr>
 <tr><td>ROCKET-blind</td><td class="ok">met</td>
     <td>rocket ${fmt(g.arms[0].cv,3)}, minirocket ${fmt(g.arms[1].cv,3)}, multirocket ${fmt(g.arms[2].cv,3)}, all negative margins</td></tr>
 <tr><td>calibrated marginal battery clean</td><td class="ok">met</td>
     <td>${fmt(g.battery,3)} at family p = ${fmt(g.batteryP,3)}</td></tr>
 <tr><td>invariant to the analyst's free choices</td><td class="ok">met</td>
     <td>no threshold, window or resolution choice in the label definition; the reader needs none</td></tr>
-<tr><td>process-aware reader stays high</td><td class="no">not met</td>
-    <td>reader CV = ${fmt(g.readerCV,3)}, realisable but weak. This is the open problem.</td></tr>`;
+<tr><td>process-aware reader scores well</td><td class="no">not met</td>
+    <td>reader CV = ${fmt(g.readerCV,3)}, weak. This is the open problem.</td></tr>`;
 
-el('foot', 'Generated from the project\'s own code: <code>fractal_bench.selfaffine.fgn</code>, ' +
+el('foot', 'Values computed with <code>fractal_bench.selfaffine.fgn</code>, ' +
   '<code>rocket_port.rocket_features</code>, <code>audit.signal_features</code>, ' +
   '<code>audit.battery_accuracy</code>, <code>audit.family_auc_test</code>, ' +
   '<code>evaluation.head_cross_validation</code>. ' +
-  `n = ${D.n} samples per record, ${D.channels} channel, H_rough = ${D.hRough}, ` +
-  `H_smooth = ${D.hSmooth}, dial \u03B8 = \u03C0/4 + ${D.dtheta / 2}\u2009c(t), ` +
+  `n = ${D.n} samples per record, ${D.channels} channel, H = ${D.hRough} rough / ${D.hSmooth} smooth, ` +
+  `\u03B8 = \u03C0/4 + ${D.dtheta / 2}\u2009c(t), ` +
   `${D.samples} records per class, ${D.windows} windows. ` +
-  'Numbers come from the pure-NumPy ROCKET port, not the external aeon gate.');
+  'The ROCKET features come from the pure-NumPy port, not the external aeon gate.');
 
 /* ---------------- render ---------------- */
 function renderAll(){ for(const fn of draws) fn(); }
