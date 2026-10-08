@@ -86,10 +86,19 @@ def parse_uploaded_csv(df):
     Parses a user-uploaded CSV into structured stationary and non-stationary list variations.
     Expects columns: 'Condition' ('Constant Parameter' or 'Non-Stationary'), 'Label' (0 or 1), 
     and the remaining columns treated as time-series steps.
+
+    Returns ``(stationary, non_stationary, report)``; ``report`` records the rows and chunks that
+    had to be skipped, so the caller can surface them instead of scoring them silently.
     """
+    report = {
+        "unknown_rows": 0,
+        "unknown_conditions": [],
+        "single_label_chunks": 0,
+        "tiny_chunks": 0,
+    }
     if "Condition" not in df.columns or "Label" not in df.columns:
         st.error("Uploaded CSV must contain 'Condition' and 'Label' columns alongside sequential features.")
-        return [], []
+        return [], [], report
         
     stat_list = []
     non_stat_list = []
@@ -99,22 +108,52 @@ def parse_uploaded_csv(df):
     
     # Split by condition types
     for cond, sub_df in df.groupby("Condition"):
+        if cond not in ("Constant Parameter", "Non-Stationary"):
+            report["unknown_conditions"].append(str(cond))
+            report["unknown_rows"] += int(sub_df.shape[0])
+            continue
         # Chunk rows arbitrarily into pseudo-individual 'datasets' to preserve your comparison interface
         # For simplicity, we create groups of up to 50 samples per dataset iteration
         chunk_size = 50
         chunks = [sub_df[i:i + chunk_size] for i in range(0, sub_df.shape[0], chunk_size)]
         
         for chunk in chunks:
-            if chunk.shape[0] < 4: continue # skip empty/tiny fragments
+            if chunk.shape[0] < 4:
+                report["tiny_chunks"] += 1
+                continue  # skip empty/tiny fragments
             X = chunk[ts_cols].to_numpy()
             y = chunk["Label"].to_numpy().astype(int)
             
+            if len(set(y.tolist())) < 2:
+                # A chunk holding one class cannot be scored: a constant predictor returns 100%
+                # whatever algorithm is used, so reporting it as a score would be misleading.
+                report["single_label_chunks"] += 1
+                continue
+
             if cond == "Constant Parameter":
                 stat_list.append((X, y))
-            elif cond == "Non-Stationary":
+            else:
                 non_stat_list.append((X, y))
                 
-    return stat_list, non_stat_list
+    return stat_list, non_stat_list, report
+
+
+def show_parse_report(report):
+    """Surface whatever parse_uploaded_csv had to skip, instead of failing silently."""
+    if report["unknown_rows"]:
+        names = ", ".join(sorted(set(report["unknown_conditions"])))
+        st.warning(
+            f"Ignored {report['unknown_rows']} row(s) whose 'Condition' is not 'Constant Parameter' "
+            f"or 'Non-Stationary' (found: {names})."
+        )
+    if report["single_label_chunks"]:
+        st.warning(
+            f"Skipped {report['single_label_chunks']} dataset chunk(s) that contained only one "
+            "class. Accuracy on a single-class chunk is always 100% no matter which algorithm "
+            "runs, so those chunks are excluded rather than reported as a result."
+        )
+    if report["tiny_chunks"]:
+        st.info(f"Skipped {report['tiny_chunks']} row fragment(s) with fewer than 4 samples.")
 
 
 # ==========================================
@@ -219,14 +258,28 @@ else:
         st.write("📋 **Uploaded Data Sample Preview:**")
         st.dataframe(raw_df.head(4))
         
-        stat_data, non_stat_data = parse_uploaded_csv(raw_df)
+        stat_data, non_stat_data, parse_report = parse_uploaded_csv(raw_df)
+        show_parse_report(parse_report)
         
         max_available = min(len(stat_data), len(non_stat_data))
         if max_available > 0:
-            num_datasets = st.sidebar.slider(f"Datasets found. Evaluate up to (Max {max_available})", 1, max_available, max_available)
+            if max_available == 1:
+                # st.slider rejects min_value == max_value, which is exactly what a CSV
+                # yielding a single dataset chunk per condition produces.
+                num_datasets = 1
+                st.sidebar.write("Datasets found: 1")
+            else:
+                num_datasets = st.sidebar.slider(
+                    f"Datasets found. Evaluate up to (Max {max_available})",
+                    1, max_available, max_available,
+                )
             ready_to_run = True
         else:
-            st.error("Error splitting CSV. Please ensure you have data rows labeled under both 'Constant Parameter' and 'Non-Stationary' conditions.")
+            st.error(
+                "No evaluable datasets found. Each 50-row chunk must sit under one 'Condition' "
+                "('Constant Parameter' or 'Non-Stationary') and contain both Label 0 and Label 1 "
+                "rows, because a chunk with a single class is always scored at 100%."
+            )
 
 test_size = st.sidebar.slider("Test Set Split Proportion", 0.1, 0.5, 0.3)
 
