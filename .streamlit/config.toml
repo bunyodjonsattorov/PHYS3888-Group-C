@@ -1,0 +1,13 @@
+# Pinned to the light palette instead of following the viewer's system setting, so
+# the module pages, tables and figures look the same on every machine. A viewer can
+# still switch to dark for their own session from the app menu.
+#
+# The colours are the light palette's own defaults, listed explicitly because a
+# theme declared here with only `base` set ships empty strings for the sidebar
+# overrides, and the client logs a warning for each one.
+[theme]
+base = "light"
+primaryColor = "#FF4B4B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#31333F"
