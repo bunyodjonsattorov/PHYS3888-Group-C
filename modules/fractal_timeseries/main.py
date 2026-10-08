@@ -27,7 +27,7 @@ local texture is hidden by the smooth ingredient's drift.
 
 Run standalone to refresh the CSV::
 
-    python3 modules/exponent_dispersion/main.py
+    python3 modules/fractal_timeseries/main.py
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
-TITLE = "Exponent dispersion"
+TITLE = "Fractal Timeseries"
 DESCRIPTION = (
     "Two fractal ingredients blended at a dial angle that is either frozen or "
     "drifting. The classes match in every marginal statistic."
@@ -46,7 +46,12 @@ DESCRIPTION = (
 # app.py scores each block of 50 rows, so a block must never hold one class only.
 CHUNK = 50
 LENGTH = 1024
-PER_CONDITION = 100
+# 500 rows per condition = 10 blocks of 50, so app.py's "Datasets to evaluate"
+# slider can average accuracy over 10 splits instead of 2. Each record is an
+# independent draw of the same label, so this buys statistical resolution and
+# changes no part of the construction. It costs file size and runtime: DTW makes
+# a full 10-dataset run slow, which is exactly what that slider is for.
+PER_CONDITION = 500
 SEED = 0
 
 H_ROUGH = 0.4

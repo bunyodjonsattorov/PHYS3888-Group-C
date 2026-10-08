@@ -295,22 +295,35 @@ def run_benchmark(stat_data, non_stat_data, num_datasets, test_size):
 
 
 def show_results(df_results):
+    # Every figure below is a mean over the datasets the user chose to evaluate,
+    # never a single train/test split, so the winner is decided on that average.
     summary = df_results.groupby(["Condition", "Algorithm"])[["Accuracy", "Time (s)"]].mean().reset_index()
+    n_datasets = int(df_results["Dataset"].nunique())
+    basis = "1 dataset" if n_datasets == 1 else f"{n_datasets} datasets"
 
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📈 Performance Benchmarks Summary")
         st.dataframe(summary.style.format({"Accuracy": "{:.2%}", "Time (s)": "{:.4f}s"}))
+        st.caption(f"Mean over {basis}; each dataset is a block of up to 50 rows with "
+                   "its own train/test split.")
 
     with col2:
         st.subheader("💡 Key Takeaways")
         for cond in ["Constant Parameter", "Non-Stationary"]:
             cond_df = summary[summary["Condition"] == cond]
             if not cond_df.empty:
-                best_alg = cond_df.loc[cond_df["Accuracy"].idxmax()]["Algorithm"]
                 best_acc = cond_df["Accuracy"].max()
-                st.write(f"🔹 For **{cond}** environments, **{best_alg}** yielded peak "
-                         f"performance at **{best_acc:.1%}** accuracy.")
+                # Algorithms separated by less than float noise are not "the winner",
+                # so a tie is reported as a tie instead of crowning whichever sorted first.
+                top = cond_df.loc[np.isclose(cond_df["Accuracy"], best_acc), "Algorithm"].tolist()
+                if len(top) == 1:
+                    st.write(f"🔹 Over {basis}, **{top[0]}** yielded peak performance on "
+                             f"**{cond}** at **{best_acc:.1%}** accuracy.")
+                else:
+                    names = ", ".join(f"**{a}**" for a in top[:-1]) + f" and **{top[-1]}**"
+                    st.write(f"🔹 Over {basis}, {names} tied at the top on **{cond}** at "
+                             f"**{best_acc:.1%}** accuracy.")
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
     st.dataframe(df_results)
@@ -384,7 +397,7 @@ modules = [describe_module(found) for found in discover_modules()]
 home_tab, *module_tabs = st.tabs(["Home"] + [m["title"] for m in modules])
 
 with home_tab:
-    st.markdown("### Modules")
+    st.markdown("### Modules", anchors=False)
     st.caption("One tab per module. Each module owns the CSV its benchmark runs on.")
     if modules:
         for info in modules:
@@ -398,7 +411,7 @@ with home_tab:
                 "and `main.html`.")
     st.caption("To add your own, see the Modules section of README.md.")
 
-    st.markdown("### Upload your own CSV")
+    st.markdown("### Upload your own CSV", anchors=False)
     uploaded_file = st.file_uploader("Upload Time-Series CSV Dataset", type=["csv"])
     if uploaded_file is not None:
         raw_df = pd.read_csv(uploaded_file)

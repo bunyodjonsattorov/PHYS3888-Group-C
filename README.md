@@ -33,7 +33,7 @@ is what happens after you edit a generator; there is nothing to run by hand.
 Shipping today:
 
 ```
-modules/exponent_dispersion   a dial angle held frozen against one allowed to drift
+modules/fractal_timeseries    a dial angle held frozen against one allowed to drift
 modules/synthetic             AR(1) pairs, and random walks whose drift flips sign
 ```
 
@@ -64,9 +64,17 @@ skips it and says so instead of reporting that as a result.
 ## Worth knowing
 
 DTW compares every test series against every training series, so it dominates the
-runtime while the other three finish almost instantly.
+runtime while the other three finish almost instantly. On the fractal module's
+1024-sample records one 50-row dataset costs roughly 3 minutes of DTW, so its full
+ten-dataset run takes about an hour. The dataset slider is the dial for that: one
+or two gives a quick look, ten gives the steadiest answer.
 
-Accuracy comes from a single train/test split of a 50-row block, so on the small
-modules the gap between the best and worst algorithm is largely noise. The
-"peak performance" line names whichever won that split, which is why it can move
-between runs and between conditions.
+That fractal CSV is about 10 MB, which is what ten blocks of 1024-sample records
+cost on disk. `PER_CONDITION` in its `main.py` is the single number to change if
+that trade is not worth making.
+
+Accuracy per dataset comes from a single train/test split of a block of up to 50
+rows, and every figure the app reports is the mean over the datasets you chose
+rather than over one split. A lone dataset can crown a different winner on each run, and
+averaging across the ten the fractal module offers is what steadies it. The
+"peak performance" line states the basis it averaged over.
