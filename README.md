@@ -38,6 +38,7 @@ Shipping today:
 ```
 modules/fractal_timeseries    a dial angle held frozen against one allowed to drift
 modules/synthetic             AR(1) pairs, and random walks whose drift flips sign
+modules/chaos_sampling        chaotic logistic-map series against matched fakes, recorded at every step and every 4th step
 ```
 
 ### Adding a module
@@ -62,7 +63,7 @@ Constant Parameter,1,1.07,0.55,...
 `Condition` names the task a row belongs to and can be any text. Every distinct value
 is its own condition, shown in the order it first appears in the file; the existing
 modules use `Constant Parameter` and `Non-Stationary`, and a module can define its own.
-`Label` has to be 0 or 1. Within each condition, rows are scored in blocks of 50, and
+Every column other than `Condition` and `Label` is read as a time step, so a CSV must not carry extra metadata columns. `Label` has to be 0 or 1. Within each condition, rows are scored in blocks of 50, and
 every block has to hold both labels. A block with one label is scored at 100% by any
 algorithm, so the app skips it and says so instead of reporting that as a result.
 Every condition is scored on the same number of datasets, the smallest count any of
