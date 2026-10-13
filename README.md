@@ -12,7 +12,10 @@ streamlit run app.py
 ```
 
 Only the first half of that list is required. Without sktime, pycatch22 or fastdtw
-the app still runs, and the sidebar marks the affected algorithms as proxies.
+the app still runs, but it skips the algorithms that need the missing library. The
+sidebar marks them as not installed and the results cover only what actually ran.
+The app never substitutes random guesses or a cruder method for a missing algorithm,
+because a made-up score reported under a real name could be mistaken for a result.
 
 ## Modules
 

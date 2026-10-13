@@ -21,7 +21,8 @@ from sklearn.linear_model import RidgeClassifierCV
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 
-# Specialised time-series libraries, with fallbacks when they are not installed.
+# Specialised time-series libraries. When one is not installed, the algorithms that
+# need it are skipped and reported as such, never replaced by a stand-in.
 try:
     from sktime.transformations.panel.rocket import MiniRocket, Rocket
     SKTIME_AVAILABLE = True
@@ -43,11 +44,28 @@ except ImportError:
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
 
-# The two conditions the app accepts, and the algorithms the benchmark runs. The
-# benchmark and the progress bar both step through these, in this order, so the
-# bar's plan and the work actually done cannot drift apart.
+# The two conditions the app accepts, and every algorithm it knows. The benchmark
+# and the progress bar both step through the ones that can actually run (see
+# active_algorithms), in this order, so the bar's plan and the work actually done
+# cannot drift apart.
 CONDITIONS = ("Constant Parameter", "Non-Stationary")
 ALGORITHMS = ("Rocket", "MiniRocket", "catch22", "DTW")
+
+
+def algorithm_available(name):
+    """Whether the library behind an algorithm is installed."""
+    return {"Rocket": SKTIME_AVAILABLE, "MiniRocket": SKTIME_AVAILABLE,
+            "catch22": CATCH22_AVAILABLE, "DTW": DTW_AVAILABLE}[name]
+
+
+def active_algorithms():
+    """The algorithms that can really run, in ALGORITHMS order.
+
+    A missing library means its algorithms are skipped. They are never swapped for
+    a stand-in (random guesses, a cruder method) reported under the same name,
+    because a score that looks real but is not is worse than no score.
+    """
+    return tuple(name for name in ALGORITHMS if algorithm_available(name))
 
 
 # ==========================================
@@ -135,8 +153,7 @@ def show_parse_report(report):
 # ==========================================
 def evaluate_rocket(X_train, X_test, y_train, y_test, mini=False):
     if not SKTIME_AVAILABLE:
-        time.sleep(0.01)
-        return accuracy_score(y_test, np.random.binomial(1, 0.5, len(y_test))), 0.01
+        raise RuntimeError("sktime is not installed, so Rocket and MiniRocket cannot run.")
 
     start_time = time.time()
     X_train_df = pd.DataFrame({"dim_0": [pd.Series(x) for x in X_train]})
@@ -154,27 +171,17 @@ def evaluate_rocket(X_train, X_test, y_train, y_test, mini=False):
 
 
 def evaluate_catch22(X_train, X_test, y_train, y_test):
-    start_time = time.time()
     if not CATCH22_AVAILABLE:
-        def custom_catch22_features(X):
-            features = []
-            for row in X:
-                features.append([
-                    np.mean(row), np.std(row), np.max(row) - np.min(row),
-                    np.median(row), np.var(row), np.percentile(row, 75),
-                    np.percentile(row, 25), np.sum(np.abs(np.diff(row)))
-                ])
-            return np.array(features)
-        X_train_feat = custom_catch22_features(X_train)
-        X_test_feat = custom_catch22_features(X_test)
-    else:
-        def extract_features(X):
-            feats = []
-            for row in X:
-                feats.append(pycatch22.catch22_all(list(row))['values'])
-            return np.array(feats)
-        X_train_feat = extract_features(X_train)
-        X_test_feat = extract_features(X_test)
+        raise RuntimeError("pycatch22 is not installed, so catch22 cannot run.")
+    start_time = time.time()
+
+    def extract_features(X):
+        feats = []
+        for row in X:
+            feats.append(pycatch22.catch22_all(list(row))['values'])
+        return np.array(feats)
+    X_train_feat = extract_features(X_train)
+    X_test_feat = extract_features(X_test)
 
     classifier = RidgeClassifierCV()
     classifier.fit(X_train_feat, y_train)
@@ -190,6 +197,8 @@ def evaluate_dtw(X_train, X_test, y_train, y_test, on_test_row=None):
     a progress bar can move *within* one of its steps rather than sitting still
     for minutes.
     """
+    if not DTW_AVAILABLE:
+        raise RuntimeError("fastdtw is not installed, so DTW cannot run.")
     start_time = time.time()
     preds = []
 
@@ -197,11 +206,8 @@ def evaluate_dtw(X_train, X_test, y_train, y_test, on_test_row=None):
         best_dist = float('inf')
         best_label = 0
         for train_row, label in zip(X_train, y_train):
-            if DTW_AVAILABLE:
-                # Absolute point diff lambda bypasses SciPy 1-D shape validation.
-                dist, _ = fastdtw(test_row, train_row, dist=lambda a, b: np.abs(a - b))
-            else:
-                dist = np.linalg.norm(test_row - train_row)
+            # Absolute point diff lambda bypasses SciPy 1-D shape validation.
+            dist, _ = fastdtw(test_row, train_row, dist=lambda a, b: np.abs(a - b))
             if dist < best_dist:
                 best_dist = dist
                 best_label = label
@@ -287,11 +293,14 @@ def module_frame(info):
 # ==========================================
 # 4. BENCHMARK
 # ==========================================
-def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress=None):
-    """Score all four algorithms on the first num_datasets of each condition.
+def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress=None,
+                  algorithms=None):
+    """Score the algorithms on the first num_datasets of each condition.
+
+    ``algorithms`` defaults to the ones whose libraries are installed.
 
     One step is one algorithm on one dataset, so a run is
-    ``num_datasets * len(CONDITIONS) * len(ALGORITHMS)`` steps in total.
+    ``num_datasets * len(CONDITIONS) * len(algorithms)`` steps in total.
 
     ``on_progress(completed, total, label, seconds)``, when given, is called as
     the run advances: before each step with ``seconds=None``, after each step with
@@ -299,7 +308,8 @@ def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress
     scores test series. ``label`` describes the work in progress, so a caller can
     show what is running and how long the rest will take.
     """
-    total = num_datasets * len(CONDITIONS) * len(ALGORITHMS)
+    algorithms = active_algorithms() if algorithms is None else tuple(algorithms)
+    total = num_datasets * len(CONDITIONS) * len(algorithms)
     completed = 0
     results = []
     for i in range(num_datasets):
@@ -319,7 +329,7 @@ def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress
                     on_progress(completed + scored / rows, total,
                                 f"{_label} · DTW · {scored} of {rows} test series", None)
 
-            # Indexed by name so the loop below runs exactly ALGORITHMS, which is
+            # Indexed by name so the loop below runs exactly ``algorithms``, which is
             # the order the progress bar's plan counts.
             runners = {
                 "Rocket": lambda: evaluate_rocket(X_train, X_test, y_train, y_test, mini=False),
@@ -329,7 +339,7 @@ def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress
                                             on_test_row=report_dtw_row),
             }
 
-            for name in ALGORITHMS:
+            for name in algorithms:
                 step = f"{label} · {name}"
                 if on_progress is not None:
                     on_progress(completed, total, step, None)
@@ -354,12 +364,13 @@ def describe_duration(seconds):
     return f"{secs}s"
 
 
-def run_benchmark_plan(num_datasets):
+def run_benchmark_plan(num_datasets, algorithms=None):
     """The steps run_benchmark will take, in order: (dataset number, condition, algorithm)."""
+    algorithms = active_algorithms() if algorithms is None else tuple(algorithms)
     return [(i + 1, condition, name)
             for i in range(num_datasets)
             for condition in CONDITIONS
-            for name in ALGORITHMS]
+            for name in algorithms]
 
 
 def make_progress_reporter(plan, bar, timing, started):
@@ -371,6 +382,7 @@ def make_progress_reporter(plan, bar, timing, started):
     """
     total = len(plan)
     observed = {}   # algorithm -> its finished step durations, for the estimate
+    planned = {name for _, _, name in plan}   # the algorithms this run will time
 
     def report(completed, _total, label, seconds):
         if seconds is not None:
@@ -386,7 +398,7 @@ def make_progress_reporter(plan, bar, timing, started):
         # DTW has finished, an estimate would price the remaining DTW steps at the
         # cost of the Rocket ones and promise minutes for an hour of work.
         means = {name: sum(times) / len(times) for name, times in observed.items() if times}
-        if len(means) == len(ALGORITHMS):
+        if len(means) == len(planned):
             remaining = sum(means[name] for _, _, name in plan[int(completed):])
             left = f" · about {describe_duration(remaining)} left"
         else:
@@ -448,6 +460,16 @@ def render_benchmark(df, key, test_size, note=None):
     if note:
         st.caption(note)
 
+    algorithms = active_algorithms()
+    if not algorithms:
+        st.error("None of the algorithms can run, because sktime, pycatch22 and fastdtw "
+                 "are all missing. Install them (see README.md) and rerun.")
+        return
+    skipped = [name for name in ALGORITHMS if name not in algorithms]
+    if skipped:
+        st.warning("Not installed, so not run: " + ", ".join(skipped) + ". The results "
+                   "below cover only the algorithms that ran.")
+
     if max_available == 1:
         # st.slider rejects min_value == max_value, which a single-dataset CSV produces.
         num_datasets = 1
@@ -459,14 +481,15 @@ def render_benchmark(df, key, test_size, note=None):
     if st.button("Execute Benchmark", type="primary", use_container_width=True, key=f"{key}:run"):
         # One step per algorithm per dataset, and a real bar over them: the spinner
         # this replaces showed nothing for up to an hour on the fractal module.
-        plan = run_benchmark_plan(num_datasets)
+        plan = run_benchmark_plan(num_datasets, algorithms)
         started = time.time()
-        with st.status(f"Running Rocket, MiniRocket, catch22 and DTW ({len(plan)} steps)...",
+        with st.status(f"Running {', '.join(algorithms)} ({len(plan)} steps)...",
                        expanded=True) as status:
             bar = st.progress(0.0, text=f"Starting the first of {len(plan)} steps...")
             timing = st.empty()
             results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size,
-                                    on_progress=make_progress_reporter(plan, bar, timing, started))
+                                    on_progress=make_progress_reporter(plan, bar, timing, started),
+                                    algorithms=algorithms)
             elapsed = describe_duration(time.time() - started)
             bar.progress(1.0, text=f"All {len(plan)} steps finished")
             timing.caption(f"Elapsed {elapsed}.")
@@ -497,9 +520,10 @@ st.sidebar.header("⚙️ Evaluation Settings")
 test_size = st.sidebar.slider("Test Set Split Proportion", 0.1, 0.5, 0.3)
 
 st.sidebar.header("📦 System Library Status")
-st.sidebar.write(f"{'✅' if SKTIME_AVAILABLE else '⚠️ Proxy'} sktime (Rocket)")
-st.sidebar.write(f"{'✅' if CATCH22_AVAILABLE else '⚠️ Proxy'} pycatch22")
-st.sidebar.write(f"{'✅' if DTW_AVAILABLE else '⚠️ Proxy'} fastdtw")
+NOT_INSTALLED = "❌ not installed, skipped"
+st.sidebar.write(f"{'✅' if SKTIME_AVAILABLE else NOT_INSTALLED} sktime (Rocket, MiniRocket)")
+st.sidebar.write(f"{'✅' if CATCH22_AVAILABLE else NOT_INSTALLED} pycatch22")
+st.sidebar.write(f"{'✅' if DTW_AVAILABLE else NOT_INSTALLED} fastdtw")
 
 st.title("⏱️ Time-Series Algorithm Benchmarking Suite")
 st.markdown("""
