@@ -59,10 +59,14 @@ Constant Parameter,0,0.13,-0.42,...
 Constant Parameter,1,1.07,0.55,...
 ```
 
-`Condition` has to be `Constant Parameter` or `Non-Stationary`, and `Label` has to
-be 0 or 1. Rows are scored in blocks of 50, and every block has to hold both
-labels. A block with one label is scored at 100% by any algorithm, so the app
-skips it and says so instead of reporting that as a result.
+`Condition` names the task a row belongs to and can be any text. Every distinct value
+is its own condition, shown in the order it first appears in the file; the existing
+modules use `Constant Parameter` and `Non-Stationary`, and a module can define its own.
+`Label` has to be 0 or 1. Within each condition, rows are scored in blocks of 50, and
+every block has to hold both labels. A block with one label is scored at 100% by any
+algorithm, so the app skips it and says so instead of reporting that as a result.
+Every condition is scored on the same number of datasets, the smallest count any of
+them has, and a condition with no usable block is left out with a warning.
 
 ## Worth knowing
 

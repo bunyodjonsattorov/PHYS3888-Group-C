@@ -44,11 +44,10 @@ except ImportError:
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
 
-# The two conditions the app accepts, and every algorithm it knows. The benchmark
-# and the progress bar both step through the ones that can actually run (see
-# active_algorithms), in this order, so the bar's plan and the work actually done
-# cannot drift apart.
-CONDITIONS = ("Constant Parameter", "Non-Stationary")
+# Every algorithm the app knows. The benchmark and the progress bar both step through
+# the ones that can actually run (see active_algorithms), in this order, so the bar's
+# plan and the work actually done cannot drift apart. Conditions are not listed here:
+# they are whatever values a CSV's Condition column holds.
 ALGORITHMS = ("Rocket", "MiniRocket", "catch22", "DTW")
 
 
@@ -73,36 +72,38 @@ def active_algorithms():
 # ==========================================
 def parse_uploaded_csv(df):
     """
-    Parses a CSV into structured stationary and non-stationary list variations.
-    Expects columns: 'Condition' ('Constant Parameter' or 'Non-Stationary'),
+    Parses a CSV into datasets, grouped by condition.
+    Expects columns: 'Condition' (any text; each distinct value is one condition),
     'Label' (0 or 1), and the remaining columns treated as time-series steps.
 
-    Returns ``(stationary, non_stationary, report)``; ``report`` records the rows
-    and chunks that had to be skipped, so the caller can surface them instead of
-    scoring them silently.
+    Returns ``(datasets, report)``. ``datasets`` maps each condition, in the order it
+    first appears in the CSV, to its list of ``(X, y)`` datasets (blocks of up to 50
+    rows). A condition with no evaluable block maps to an empty list, so the caller
+    can say so. ``report`` records the rows and chunks that had to be skipped, so the
+    caller can surface them instead of scoring them silently.
     """
     report = {
-        "unknown_rows": 0,
-        "unknown_conditions": [],
+        "missing_condition_rows": 0,
         "single_label_chunks": 0,
         "tiny_chunks": 0,
     }
     if "Condition" not in df.columns or "Label" not in df.columns:
         st.error("Uploaded CSV must contain 'Condition' and 'Label' columns alongside sequential features.")
-        return [], [], report
+        return {}, report
 
-    stat_list = []
-    non_stat_list = []
+    datasets = {}
 
     # Isolate time series data columns
     ts_cols = [c for c in df.columns if c not in ["Condition", "Label"]]
 
-    # Split by condition types
-    for cond, sub_df in df.groupby("Condition"):
-        if cond not in ("Constant Parameter", "Non-Stationary"):
-            report["unknown_conditions"].append(str(cond))
-            report["unknown_rows"] += int(sub_df.shape[0])
-            continue
+    # A row with no condition belongs to no task, so it cannot be scored.
+    missing = df["Condition"].isna() | (df["Condition"].astype(str).str.strip() == "")
+    report["missing_condition_rows"] = int(missing.sum())
+    df = df[~missing]
+
+    # Split by condition, keeping the order the conditions first appear in the CSV.
+    for cond, sub_df in df.groupby("Condition", sort=False):
+        datasets[str(cond)] = []
         # Chunk rows arbitrarily into pseudo-individual 'datasets' to preserve the
         # comparison interface: groups of up to 50 samples per dataset iteration.
         chunk_size = 50
@@ -122,21 +123,17 @@ def parse_uploaded_csv(df):
                 report["single_label_chunks"] += 1
                 continue
 
-            if cond == "Constant Parameter":
-                stat_list.append((X, y))
-            else:
-                non_stat_list.append((X, y))
+            datasets[str(cond)].append((X, y))
 
-    return stat_list, non_stat_list, report
+    return datasets, report
 
 
 def show_parse_report(report):
     """Surface whatever parse_uploaded_csv had to skip, instead of failing silently."""
-    if report["unknown_rows"]:
-        names = ", ".join(sorted(set(report["unknown_conditions"])))
+    if report["missing_condition_rows"]:
         st.warning(
-            f"Ignored {report['unknown_rows']} row(s) whose 'Condition' is not 'Constant Parameter' "
-            f"or 'Non-Stationary' (found: {names})."
+            f"Ignored {report['missing_condition_rows']} row(s) with an empty 'Condition', "
+            "because they belong to no task."
         )
     if report["single_label_chunks"]:
         st.warning(
@@ -293,14 +290,16 @@ def module_frame(info):
 # ==========================================
 # 4. BENCHMARK
 # ==========================================
-def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress=None,
+def run_benchmark(data_by_condition, num_datasets, test_size, on_progress=None,
                   algorithms=None):
     """Score the algorithms on the first num_datasets of each condition.
 
-    ``algorithms`` defaults to the ones whose libraries are installed.
+    ``data_by_condition`` maps each condition to its list of ``(X, y)`` datasets, as
+    parse_uploaded_csv returns them. ``algorithms`` defaults to the ones whose
+    libraries are installed.
 
     One step is one algorithm on one dataset, so a run is
-    ``num_datasets * len(CONDITIONS) * len(algorithms)`` steps in total.
+    ``num_datasets * len(data_by_condition) * len(algorithms)`` steps in total.
 
     ``on_progress(completed, total, label, seconds)``, when given, is called as
     the run advances: before each step with ``seconds=None``, after each step with
@@ -309,11 +308,11 @@ def run_benchmark(stat_data, non_stat_data, num_datasets, test_size, on_progress
     show what is running and how long the rest will take.
     """
     algorithms = active_algorithms() if algorithms is None else tuple(algorithms)
-    total = num_datasets * len(CONDITIONS) * len(algorithms)
+    total = num_datasets * len(data_by_condition) * len(algorithms)
     completed = 0
     results = []
     for i in range(num_datasets):
-        for condition, data in zip(CONDITIONS, (stat_data, non_stat_data)):
+        for condition, data in data_by_condition.items():
             X, y = data[i]
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=i)
@@ -364,12 +363,12 @@ def describe_duration(seconds):
     return f"{secs}s"
 
 
-def run_benchmark_plan(num_datasets, algorithms=None):
+def run_benchmark_plan(num_datasets, conditions, algorithms=None):
     """The steps run_benchmark will take, in order: (dataset number, condition, algorithm)."""
     algorithms = active_algorithms() if algorithms is None else tuple(algorithms)
     return [(i + 1, condition, name)
             for i in range(num_datasets)
-            for condition in CONDITIONS
+            for condition in conditions
             for name in algorithms]
 
 
@@ -411,7 +410,14 @@ def make_progress_reporter(plan, bar, timing, started):
 def show_results(df_results):
     # Every figure below is a mean over the datasets the user chose to evaluate,
     # never a single train/test split, so the winner is decided on that average.
-    summary = df_results.groupby(["Condition", "Algorithm"])[["Accuracy", "Time (s)"]].mean().reset_index()
+    # Conditions are listed in the order the benchmark first ran them, which is the
+    # order they appear in the CSV.
+    conditions = list(df_results["Condition"].unique())
+    summary = (df_results
+               .assign(Condition=pd.Categorical(df_results["Condition"], categories=conditions, ordered=True))
+               .groupby(["Condition", "Algorithm"], observed=True)[["Accuracy", "Time (s)"]]
+               .mean().reset_index())
+    summary["Condition"] = summary["Condition"].astype(str)
     n_datasets = int(df_results["Dataset"].nunique())
     basis = "1 dataset" if n_datasets == 1 else f"{n_datasets} datasets"
 
@@ -424,7 +430,7 @@ def show_results(df_results):
 
     with col2:
         st.subheader("💡 Key Takeaways")
-        for cond in ["Constant Parameter", "Non-Stationary"]:
+        for cond in conditions:
             cond_df = summary[summary["Condition"] == cond]
             if not cond_df.empty:
                 best_acc = cond_df["Accuracy"].max()
@@ -445,17 +451,29 @@ def show_results(df_results):
 
 def render_benchmark(df, key, test_size, note=None):
     """Parse a CSV, then offer the dataset count and the big Execute Benchmark button."""
-    stat_data, non_stat_data, report = parse_uploaded_csv(df)
+    datasets, report = parse_uploaded_csv(df)
     show_parse_report(report)
 
-    max_available = min(len(stat_data), len(non_stat_data))
-    if max_available == 0:
+    unusable = [cond for cond, found in datasets.items() if not found]
+    if unusable:
+        st.warning("No evaluable dataset under the condition(s) " + ", ".join(unusable)
+                   + ", so they are left out.")
+    datasets = {cond: found for cond, found in datasets.items() if found}
+
+    if not datasets:
         st.error(
             "No evaluable datasets found. Each 50-row block must sit under one 'Condition' "
-            "('Constant Parameter' or 'Non-Stationary') and contain both Label 0 and Label 1 "
-            "rows, because a block with a single class is always scored at 100%."
+            "and contain both Label 0 and Label 1 rows, because a block with a single "
+            "class is always scored at 100%."
         )
         return
+
+    counts = {cond: len(found) for cond, found in datasets.items()}
+    max_available = min(counts.values())
+    if len(set(counts.values())) > 1:
+        st.caption("Datasets per condition: "
+                   + ", ".join(f"{cond}: {n}" for cond, n in counts.items())
+                   + f". Every condition is scored on the same number, so at most {max_available}.")
 
     if note:
         st.caption(note)
@@ -481,13 +499,13 @@ def render_benchmark(df, key, test_size, note=None):
     if st.button("Execute Benchmark", type="primary", use_container_width=True, key=f"{key}:run"):
         # One step per algorithm per dataset, and a real bar over them: the spinner
         # this replaces showed nothing for up to an hour on the fractal module.
-        plan = run_benchmark_plan(num_datasets, algorithms)
+        plan = run_benchmark_plan(num_datasets, list(datasets), algorithms)
         started = time.time()
         with st.status(f"Running {', '.join(algorithms)} ({len(plan)} steps)...",
                        expanded=True) as status:
             bar = st.progress(0.0, text=f"Starting the first of {len(plan)} steps...")
             timing = st.empty()
-            results = run_benchmark(stat_data, non_stat_data, num_datasets, test_size,
+            results = run_benchmark(datasets, num_datasets, test_size,
                                     on_progress=make_progress_reporter(plan, bar, timing, started),
                                     algorithms=algorithms)
             elapsed = describe_duration(time.time() - started)
@@ -527,8 +545,8 @@ st.sidebar.write(f"{'✅' if DTW_AVAILABLE else NOT_INSTALLED} fastdtw")
 
 st.title("⏱️ Time-Series Algorithm Benchmarking Suite")
 st.markdown("""
-Compare **Constant Parameter (Stationary)** and **Non-Stationary** data performance across
-**Rocket**, **MiniRocket**, **DTW**, and **catch22**.
+Compare how **Rocket**, **MiniRocket**, **DTW** and **catch22** classify each module's labelled
+time series, under each of the conditions that module defines.
 """)
 
 modules = [describe_module(found) for found in discover_modules()]
