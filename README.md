@@ -39,6 +39,7 @@ Shipping today:
 modules/fractal_timeseries    a dial angle held frozen against one allowed to drift
 modules/synthetic             AR(1) pairs, and random walks whose drift flips sign
 modules/chaos_sampling        chaotic logistic-map series against matched fakes, recorded at every step and every 4th step
+modules/chaos_multisystem     the same chaos-vs-fake task on logistic, Lorenz and Rossler, each recorded finely and coarsely; add your own system in main.py
 ```
 
 ### Adding a module

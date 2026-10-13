@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chaos vs matched fake, several systems</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#0f172a}
+  h1{font-size:20px;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:15px;margin:22px 0 4px}
+  p,li{color:#334155;margin:0 0 8px}
+  ul{margin:0 0 8px;padding-left:20px}
+  .lead{font-size:16px;color:#0f172a}
+  .note{color:#64748b;font-size:13px}
+</style>
+</head>
+<body>
+<h1>One task, several chaotic systems</h1>
+<p class="lead">Each series is either a real chaotic series (label 1) or a fake with the same values and almost the same power spectrum (label 0). Only the order of the values, the determinism, can give the fake away.</p>
+
+<h2>Systems and sampling</h2>
+<ul>
+  <li><b>Logistic map</b>, <b>Lorenz</b> (x coordinate) and <b>Rossler</b> (x coordinate).</li>
+  <li>Each is recorded finely (&lambda;&Delta;t = 0.5) and coarsely (&lambda;&Delta;t = 2.0), where &lambda;&Delta;t is how much a tiny error grows between two recorded points. Every row of the results is one system at one sampling.</li>
+</ul>
+
+<h2>Why several systems</h2>
+<p>A method that only learns the look of one system will fail on another. Comparing the systems shows whether a gap between dynamics-aware methods and shape-matching methods is general or belongs to one system.</p>
+
+<h2>Add your system</h2>
+<p>Add one entry to <code>SYSTEMS</code> in <code>main.py</code> (an ODE needs only its derivative, its largest Lyapunov exponent and a step size), then rerun it. Please check that your parameters are really chaotic.</p>
+<p class="note">Fakes are IAAFT surrogates, each the best spectral match of 10 attempts. Real and fake rows of a dataset come from different orbits. Series are z-normalised.</p>
+</body>
+</html>
