@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chaos vs matched fake</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#0f172a}
+  h1{font-size:20px;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:15px;margin:22px 0 4px}
+  p,li{color:#334155;margin:0 0 8px}
+  ul{margin:0 0 8px;padding-left:20px}
+  .lead{font-size:16px;color:#0f172a}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+  .card{border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;background:#f8fafc}
+  .card b{display:block;margin-bottom:2px}
+  .note{color:#64748b;font-size:13px}
+  canvas{width:100%;max-width:640px;height:auto;display:block;margin:6px 0 2px}
+  @media (max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>Chaos vs a matched fake</h1>
+<p class="lead">Each series is either a real chaotic series (label 1) or a fake built to match it (label 0), and the algorithm has to say which. The fake has exactly the same values and almost the same power spectrum, so only the order of the values, the determinism, can give it away.</p>
+
+<h2>Two conditions, one system</h2>
+<div class="grid">
+  <div class="card"><b>Fine sampling</b>Every step of the system is recorded.</div>
+  <div class="card"><b>Coarse sampling</b>Every 4th step is recorded. The rule is still exact, but consecutive recorded values are now linked by the rule applied four times.</div>
+</div>
+<canvas id="orbit" width="1280" height="320" aria-label="A chaotic orbit with every 4th step highlighted"></canvas>
+<p class="note">One logistic-map orbit (r = 3.99). Fine sampling keeps every point; coarse sampling keeps only the highlighted ones.</p>
+
+<h2>How the series are built</h2>
+<ul>
+  <li><b>System:</b> the logistic map x &rarr; r x (1 &minus; x) with r drawn from 3.90, 3.95 and 3.99, where it is strongly chaotic.</li>
+  <li><b>Real series:</b> 100-sample windows whose end matches their start, so the fake's wrap-around seam is not a giveaway. Every series is z-normalised.</li>
+  <li><b>Fake series:</b> IAAFT surrogates: the same values, a power spectrum matched to within a few percent, and scrambled phases, which removes the determinism. The best of 20 attempts is kept.</li>
+  <li><b>Datasets:</b> 50 rows each, 25 real and 25 fake, drawn from 50 different orbits. A fake never sits in the same dataset as the series it was made from, so a random train/test split cannot put a real series and its own twin on opposite sides.</li>
+</ul>
+
+<h2>How to read the result</h2>
+<p>Chance is 50%. Compare each algorithm across the two conditions: a drop from fine to coarse means it was using short-range structure that coarse sampling hides.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li>One system, and a one-dimensional map at that.</li>
+  <li>No measurement noise.</li>
+  <li>Ten small datasets per condition, each scored on one train/test split of about 35 training rows, so single results move around. Rely on the average over datasets.</li>
+</ul>
+
+<script>
+(function () {
+  var c = document.getElementById("orbit"), g = c.getContext("2d"), W = c.width, H = c.height;
+  var n = 49, r = 3.99, x = 0.3, v = [];
+  for (var i = 0; i <= n; i++) { v.push(x); x = r * x * (1 - x); }
+  var px = function (i) { return 30 + i * (W - 60) / n; }, py = function (y) { return H - 24 - y * (H - 48); };
+  g.strokeStyle = "#cbd5e1"; g.lineWidth = 2; g.beginPath(); g.moveTo(30, H - 24); g.lineTo(W - 30, H - 24); g.stroke();
+  g.strokeStyle = "#94a3b8"; g.lineWidth = 2; g.beginPath();
+  v.forEach(function (y, i) { i ? g.lineTo(px(i), py(y)) : g.moveTo(px(i), py(y)); }); g.stroke();
+  v.forEach(function (y, i) {
+    g.beginPath(); g.arc(px(i), py(y), i % 4 === 0 ? 8 : 4, 0, 6.2832);
+    g.fillStyle = i % 4 === 0 ? "#2563eb" : "#94a3b8"; g.fill();
+  });
+})();
+</script>
+</body>
+</html>
