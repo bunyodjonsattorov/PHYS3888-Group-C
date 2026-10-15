@@ -1,0 +1,9 @@
+streamlit>=1.50
+numpy
+pandas
+scikit-learn
+scikit-base
+sktime
+pycatch22
+fastdtw
+numba
