@@ -41,6 +41,12 @@ try:
 except ImportError:
     DTW_AVAILABLE = False
 
+try:
+    from fsfa import fSFA   # from the file fsfa.py
+    FSFA_AVAILABLE = True
+except ImportError:
+    FSFA_AVAILABLE = False
+
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
 
@@ -48,13 +54,14 @@ CSV_NAME = "data.csv"
 # the ones that can actually run (see active_algorithms), in this order, so the bar's
 # plan and the work actually done cannot drift apart. Conditions are not listed here:
 # they are whatever values a CSV's Condition column holds.
-ALGORITHMS = ("Rocket", "MiniRocket", "catch22", "DTW")
+ALGORITHMS = ("Rocket", "MiniRocket", "catch22", "DTW", "fSFA")
 
 
 def algorithm_available(name):
     """Whether the library behind an algorithm is installed."""
     return {"Rocket": SKTIME_AVAILABLE, "MiniRocket": SKTIME_AVAILABLE,
-            "catch22": CATCH22_AVAILABLE, "DTW": DTW_AVAILABLE}[name]
+            "catch22": CATCH22_AVAILABLE, "DTW": DTW_AVAILABLE,
+            "fSFA": FSFA_AVAILABLE}[name]
 
 
 def active_algorithms():
@@ -215,6 +222,39 @@ def evaluate_dtw(X_train, X_test, y_train, y_test, on_test_row=None):
     return accuracy_score(y_test, preds), time.time() - start_time
 
 
+def evaluate_fsfa(X_train, X_test, y_train, y_test, n_components=3):
+    if not (FSFA_AVAILABLE and CATCH22_AVAILABLE):
+        raise RuntimeError("fsfa (with sksfa and pycatch22) is not installed, so fSFA cannot run.")
+    start_time = time.time()
+
+    T = X_train.shape[1]
+    window = max(10, T // 4)               # catch22 needs a reasonable window
+    stride = max(1, window // 8)           # ~25+ windows, more than the 24 features
+
+    def summarise(row):
+        S = fSFA(np.asarray(row, dtype=float).reshape(-1, 1), window, stride,
+                 featureset="catch24", n_components=n_components)
+        S = np.nan_to_num(np.asarray(S))
+        d = np.diff(S, axis=0)
+        z = (S - S.mean(0)) / (S.std(0) + 1e-12)
+        feats = [
+            np.abs((z ** 3).mean(0)),                       # |skewness|, sign-invariant
+            (z ** 4).mean(0),                               # kurtosis
+            np.abs(d).mean(0),                              # mean absolute change
+            np.abs((z[1:] * z[:-1]).mean(0)),               # |lag-1 autocorrelation|
+            (np.diff(np.sign(z), axis=0) != 0).mean(0),     # zero-crossing rate
+        ]
+        return np.concatenate(feats)
+
+    X_train_feat = np.array([summarise(r) for r in X_train])
+    X_test_feat = np.array([summarise(r) for r in X_test])
+
+    classifier = RidgeClassifierCV()
+    classifier.fit(X_train_feat, y_train)
+    preds = classifier.predict(X_test_feat)
+    return accuracy_score(y_test, preds), time.time() - start_time
+
+
 # ==========================================
 # 3. MODULES
 # ==========================================
@@ -339,6 +379,7 @@ def run_benchmark(data_by_condition, num_datasets, test_size, on_progress=None,
                 "catch22": lambda: evaluate_catch22(X_train, X_test, y_train, y_test),
                 "DTW": lambda: evaluate_dtw(X_train, X_test, y_train, y_test,
                                             on_test_row=report_dtw_row),
+                "fSFA": lambda: evaluate_fsfa(X_train, X_test, y_train, y_test)
             }
 
             for name in algorithms:
@@ -554,6 +595,7 @@ NOT_INSTALLED = "❌ not installed, skipped"
 st.sidebar.write(f"{'✅' if SKTIME_AVAILABLE else NOT_INSTALLED} sktime (Rocket, MiniRocket)")
 st.sidebar.write(f"{'✅' if CATCH22_AVAILABLE else NOT_INSTALLED} pycatch22")
 st.sidebar.write(f"{'✅' if DTW_AVAILABLE else NOT_INSTALLED} fastdtw")
+st.sidebar.write(f"{'✅' if FSFA_AVAILABLE else NOT_INSTALLED} fsfa (sksfa)")
 
 st.title("⏱️ Time-Series Algorithm Benchmarking Suite")
 st.markdown("""
