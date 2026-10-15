@@ -6,12 +6,17 @@ uploading your own CSV.
 
 ## Running
 
+Python 3.10 or newer is required (3.11 is tested); the app uses `st.iframe`, which
+needs a recent Streamlit.
+
 ```
-python3 -m pip install streamlit numpy pandas scikit-learn scikit-base sktime pycatch22 fastdtw
+python3.11 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Only the first half of that list is required. Without sktime, pycatch22 or fastdtw
+Only streamlit, numpy, pandas and scikit-learn are required. Without sktime, pycatch22 or fastdtw
 the app still runs, but it skips the algorithms that need the missing library. The
 sidebar marks them as not installed and the results cover only what actually ran.
 The app never substitutes random guesses or a cruder method for a missing algorithm,

@@ -235,8 +235,11 @@ def discover_modules():
 
 def load_module_main(main_py):
     """Import a module's main.py by path, so modules need no __init__.py."""
-    spec = importlib.util.spec_from_file_location(f"_module_{main_py.parent.name}", main_py)
+    name = f"_module_{main_py.parent.name}"
+    spec = importlib.util.spec_from_file_location(name, main_py)
     module = importlib.util.module_from_spec(spec)
+    # @dataclass and similar look the module up in sys.modules while it executes.
+    sys.modules[name] = module
     # Never drop __pycache__ folders into the tree for a module we only import.
     dont_write = sys.dont_write_bytecode
     sys.dont_write_bytecode = True
