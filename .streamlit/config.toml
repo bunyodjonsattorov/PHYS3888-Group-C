@@ -1,10 +1,20 @@
-# Pinned to the light palette instead of following the viewer's system setting, so
-# the module pages, tables and figures look the same on every machine. A viewer can
-# still switch to dark for their own session from the app menu.
+# Pins the palette instead of leaving the theme to the viewer's machine. This file is
+# load-bearing: without it Streamlit follows the OS preference, and on a browser
+# reporting a dark OS the app's own defaults paint a dark page (body #0E1117, sidebar
+# #262730), so `base = "light"` is what keeps the module pages, tables and figures the
+# same on every machine.
 #
-# The colours are the light palette's own defaults, listed explicitly because a
-# theme declared here with only `base` set ships empty strings for the sidebar
-# overrides, and the client logs a warning for each one.
+# `base` alone is not enough: a theme declared that way ships empty strings for the
+# sidebar colour overrides, and the client logs a warning for each one, so the four
+# colours are listed too. They are the light palette's own defaults.
+#
+# Pinning has a cost worth knowing: Streamlit 1.65 puts a System / Light / Dark
+# appearance switcher at the top of the main menu when the theme is unpinned, and
+# declaring a base here removes it (measured on 1.65.0 -- switcher present without this
+# file, absent with it). So a viewer cannot switch to dark for their own session while
+# this is set. Deleting the file gets the switcher back.
+#
+# Read at startup: restart the server after changing anything here.
 [theme]
 base = "light"
 primaryColor = "#FF4B4B"
