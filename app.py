@@ -487,6 +487,20 @@ def show_accuracy_chart(summary):
     st.caption("Bars are the mean accuracy, whiskers one standard error, the red tick the chance level.")
 
 
+def show_gap(df_results):
+    """The gap table, only for the conditions where the dynamics reference was run."""
+    gaps = gap_table(df_results)
+    if gaps.empty:
+        return
+    st.subheader("↕️ Gap to the dynamics-aware reference")
+    st.dataframe(gaps.style.format({"Reference": "{:.1%}", "Best shape/feature": "{:.1%}",
+                                    "Gap": "{:+.1%}", "Gap SE": "{:.1%}", "fSFA": "{:.1%}"},
+                                   na_rep="–"), hide_index=True)
+    st.caption("Gap = the dynamics reference's accuracy minus the best of Rocket, MiniRocket, "
+               "catch22 and DTW on the same dataset, averaged over datasets (± its standard "
+               "error). fSFA is listed beside it, not included in that maximum.")
+
+
 def show_results(df_results):
     # Every figure below is a mean over the datasets the user chose to evaluate,
     # never a single train/test split, so the winner is decided on that average.
@@ -531,6 +545,7 @@ def show_results(df_results):
                     st.write(f"🔹 Over {basis}, {names} tied at the top on **{cond}** at "
                              f"**{best_acc:.1%}** accuracy.")
 
+    show_gap(df_results)
     show_accuracy_chart(summary)
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
