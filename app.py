@@ -47,6 +47,8 @@ try:
 except ImportError:
     FSFA_AVAILABLE = False
 
+from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
+
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
 
@@ -62,6 +64,16 @@ def algorithm_available(name):
     return {"Rocket": SKTIME_AVAILABLE, "MiniRocket": SKTIME_AVAILABLE,
             "catch22": CATCH22_AVAILABLE, "DTW": DTW_AVAILABLE,
             "fSFA": FSFA_AVAILABLE}[name]
+
+
+def run_algorithms():
+    """What a run steps through: the installed algorithms, plus the dynamics-aware
+    reference when the sidebar checkbox is on. With it off this is exactly
+    active_algorithms(), so nothing about an ordinary run changes."""
+    algorithms = active_algorithms()
+    if st.session_state.get("include_dynamics"):
+        algorithms += (DYNAMICS,)
+    return algorithms
 
 
 def active_algorithms():
@@ -255,6 +267,12 @@ def evaluate_fsfa(X_train, X_test, y_train, y_test, n_components=3):
     return accuracy_score(y_test, preds), time.time() - start_time
 
 
+def evaluate_dynamics_timed(X_train, X_test, y_train, y_test):
+    """dynamics.evaluate_dynamics, returning (accuracy, seconds) like the others."""
+    start_time = time.time()
+    return evaluate_dynamics(X_train, X_test, y_train, y_test), time.time() - start_time
+
+
 # ==========================================
 # 3. MODULES
 # ==========================================
@@ -379,7 +397,8 @@ def run_benchmark(data_by_condition, num_datasets, test_size, on_progress=None,
                 "catch22": lambda: evaluate_catch22(X_train, X_test, y_train, y_test),
                 "DTW": lambda: evaluate_dtw(X_train, X_test, y_train, y_test,
                                             on_test_row=report_dtw_row),
-                "fSFA": lambda: evaluate_fsfa(X_train, X_test, y_train, y_test)
+                "fSFA": lambda: evaluate_fsfa(X_train, X_test, y_train, y_test),
+                DYNAMICS: lambda: evaluate_dynamics_timed(X_train, X_test, y_train, y_test),
             }
 
             for name in algorithms:
@@ -522,8 +541,8 @@ def render_benchmark(df, key, test_size, note=None):
     if note:
         st.caption(note)
 
-    algorithms = active_algorithms()
-    if not algorithms:
+    algorithms = run_algorithms()
+    if not active_algorithms():
         st.error("None of the algorithms can run, because sktime, pycatch22 and fastdtw "
                  "are all missing. Install them (see README.md) and rerun.")
         return
@@ -589,6 +608,13 @@ st.set_page_config(page_title="Time-Series Framework Benchmark", layout="wide")
 
 st.sidebar.header("⚙️ Evaluation Settings")
 test_size = st.sidebar.slider("Test Set Split Proportion", 0.1, 0.5, 0.3)
+
+st.sidebar.checkbox(
+    "Include dynamics-aware reference (NN)", key="include_dynamics",
+    help="A simple reference, not a proposed best method: it scores how predictable "
+         "each series is one step ahead from its nearest neighbours in delay-vector "
+         "space. It is low for a scrambled order and high for deterministic dynamics, "
+         "and it is fragile to observation noise.")
 
 st.sidebar.header("📦 System Library Status")
 NOT_INSTALLED = "❌ not installed, skipped"
