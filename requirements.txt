@@ -7,3 +7,5 @@ sktime
 pycatch22
 fastdtw
 numba
+scipy
+sklearn-sfa
