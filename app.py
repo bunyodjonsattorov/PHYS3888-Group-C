@@ -48,6 +48,7 @@ except ImportError:
     FSFA_AVAILABLE = False
 
 from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
+from ui import show_chart
 from scoring import (gap_table, majority_class_accuracy, summary_rows,
                      uncertainty_table)
 
@@ -473,20 +474,6 @@ def make_progress_reporter(plan, bar, timing, started):
     return report
 
 
-def show_accuracy_chart(summary):
-    """Mean accuracy per algorithm with +/- 1 SE bars and the chance level, one panel per condition."""
-    import altair as alt
-    data = summary.assign(Low=lambda d: d["Accuracy"] - d["Std. error"].fillna(0),
-                          High=lambda d: d["Accuracy"] + d["Std. error"].fillna(0))
-    base = alt.Chart(data).encode(x=alt.X("Algorithm:N", sort=None, title=None))
-    bars = base.mark_bar().encode(y=alt.Y("Accuracy:Q", scale=alt.Scale(domain=[0, 1])))
-    errors = base.mark_errorbar().encode(y=alt.Y("Low:Q", title="Accuracy"), y2="High:Q")
-    chance = base.mark_tick(color="red", thickness=2, size=40).encode(y="Chance:Q")
-    st.altair_chart(alt.layer(bars, errors, chance).facet(
-        facet=alt.Facet("Condition:N", sort=None, title=None), columns=3))
-    st.caption("Bars are the mean accuracy, whiskers one standard error, the red tick the chance level.")
-
-
 def show_gap(df_results):
     """The gap table, only for the conditions where the dynamics reference was run."""
     gaps = gap_table(df_results)
@@ -518,6 +505,8 @@ def show_results(df_results):
     n_datasets = int(df_results["Dataset"].nunique())
     basis = "1 dataset" if n_datasets == 1 else f"{n_datasets} datasets"
 
+    show_chart(summary)
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📈 Performance Benchmarks Summary")
@@ -546,7 +535,6 @@ def show_results(df_results):
                              f"**{best_acc:.1%}** accuracy.")
 
     show_gap(df_results)
-    show_accuracy_chart(summary)
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
     st.dataframe(df_results)
