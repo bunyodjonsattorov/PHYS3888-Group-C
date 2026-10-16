@@ -115,7 +115,12 @@ looks at the dynamics beats every shape or feature method on that problem.
 
 Collects, for every module run in this session, one row per condition: the mean
 accuracy of each algorithm, the chance level, and the gap. Run each module first (with
-the reference on to fill the gap). It can be downloaded as CSV. Results live in the
+the reference on to fill the gap), or press **Run all modules** there to run them in turn
+behind one progress bar. A module that fails is reported and skipped, and the others still
+run. Start with 1 or 2 datasets per module, because DTW on long series is slow. Every results
+table and the Summary can be downloaded as CSV, named with the module and a timestamp.
+The chart colours are fixed in `ui.py`: blue and grey for the shape and feature methods,
+vermilion for the dynamics reference, amber for fSFA. Results live in the
 session, so they are gone when the page is reloaded.
 
 ## Tests

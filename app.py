@@ -610,7 +610,10 @@ def render_benchmark(df, key, test_size, note=None, title=None):
                 # the part worth setting -- it would otherwise still read "Running
                 # Rocket, MiniRocket, catch22 and DTW (N steps)..." beneath a red icon.
                 status.update(label="Benchmark failed", state="error")
-                raise
+                show_problem("The benchmark stopped because of a problem with this data or "
+                             "with one of the algorithms. For example, MiniRocket needs series "
+                             "of at least 9 samples.", traceback.format_exc())
+                return
             elapsed = describe_duration(time.time() - started)
             bar.progress(1.0, text=f"All {len(plan)} steps finished")
             timing.caption(f"Elapsed {elapsed}.")
@@ -750,7 +753,8 @@ with home_tab:
         for info in modules:
             st.markdown(f"**{info['title']}** &nbsp;·&nbsp; `modules/{info['name']}`")
             if info["error"]:
-                st.error(f"main.py failed to load: {info['error']}")
+                show_problem(f"{info['title']} could not be loaded, so its tab is unavailable.",
+                             info["error"])
             elif info["description"]:
                 st.caption(info["description"])
     else:
@@ -761,24 +765,30 @@ with home_tab:
     st.markdown("### Upload your own CSV", anchors=False)
     uploaded_file = st.file_uploader("Upload Time-Series CSV Dataset", type=["csv"])
     if uploaded_file is not None:
-        raw_df = pd.read_csv(uploaded_file)
-        st.write("📋 **Uploaded Data Sample Preview:**")
-        st.dataframe(raw_df.head(4))
-        render_benchmark(raw_df, key="home", test_size=test_size)
+        try:
+            raw_df = pd.read_csv(uploaded_file)
+        except Exception:
+            raw_df = None
+            show_problem("That file could not be read as a CSV. Check that it is plain "
+                         "comma-separated text.", traceback.format_exc())
+        if raw_df is not None:
+            st.write("📋 **Uploaded Data Sample Preview:**")
+            st.dataframe(raw_df.head(4))
+            render_benchmark(raw_df, key="home", test_size=test_size)
     else:
         st.info("👋 Upload a CSV to benchmark it, or pick a module tab above.")
 
 for info, tab in zip(modules, module_tabs):
     with tab:
         if info["error"]:
-            st.error(f"This module's main.py failed to load: {info['error']}")
+            show_problem("This module could not be loaded, so it cannot be run.", info["error"])
             continue
         show_module_page(info["html"])
 
         try:
             frame = module_frame(info)
         except Exception as exc:
-            st.error(f"Could not build this module's CSV: {type(exc).__name__}: {exc}")
+            show_problem("This module's data could not be built.", traceback.format_exc())
             continue
 
         render_benchmark(
