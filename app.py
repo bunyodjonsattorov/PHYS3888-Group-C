@@ -49,7 +49,7 @@ except ImportError:
     FSFA_AVAILABLE = False
 
 from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
-from ui import plain, show_chart, show_explanations, show_problem
+from ui import csv_download, plain, show_chart, show_explanations, show_problem
 from scoring import (gap_table, majority_class_accuracy, summary_rows,
                      uncertainty_table)
 
@@ -489,7 +489,7 @@ def show_gap(df_results):
                "dataset, then averaged. fSFA is shown beside it, not included.")
 
 
-def show_results(df_results):
+def show_results(df_results, label="results"):
     # Every figure below is a mean over the datasets the user chose to evaluate,
     # never a single train/test split, so the winner is decided on that average.
     # Conditions are listed in the order the benchmark first ran them, which is the
@@ -516,6 +516,7 @@ def show_results(df_results):
              "Uncertainty (± std. error)": "{:.2%}", "Chance level": "{:.1%}"}))
         st.caption(f"Mean over {basis}; each dataset is a block of up to 50 rows with "
                    "its own train/test split.")
+        csv_download(plain(summary, mean_accuracy=True), label, "results_table", key=f"dl:{label}:table")
 
     with col2:
         st.subheader("💡 Key Takeaways")
@@ -538,6 +539,7 @@ def show_results(df_results):
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
     st.dataframe(plain(df_results))
+    csv_download(plain(df_results), label, "per_dataset_results", key=f"dl:{label}:datasets")
     show_explanations()
 
 
@@ -616,7 +618,7 @@ def render_benchmark(df, key, test_size, note=None, title=None):
                           state="complete")
         # Kept for the Summary tab, which outlives the tab switch that clears this view.
         st.session_state.setdefault("summaries", {})[key] = (title or "Uploaded CSV", results)
-        show_results(results)
+        show_results(results, label=title or key)
 
 
 def run_all_modules(modules, test_size, max_datasets):
@@ -692,8 +694,7 @@ def show_summary(modules, test_size):
     st.caption("Mean accuracy over the datasets each run used. The gap is blank when the "
                "reference was not run for that module.")
     show_explanations()
-    st.download_button("Download summary as CSV", table.to_csv(index=False).encode(),
-                       file_name="benchmark_summary.csv", mime="text/csv")
+    csv_download(table, "all_modules", "summary", key="dl:summary")
 
 
 # ==========================================
