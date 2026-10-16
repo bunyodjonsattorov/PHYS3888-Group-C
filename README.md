@@ -1,8 +1,8 @@
 # Time-series benchmarking app
 
-A Streamlit app that scores four classifiers on labelled time-series CSVs: Rocket,
-MiniRocket, DTW and catch22. There is one tab per module, plus a Home tab for
-uploading your own CSV.
+A Streamlit app that scores classifiers on labelled time-series CSVs: Rocket,
+MiniRocket, DTW, catch22 and fSFA, plus an optional dynamics-aware reference. There is
+one tab per module, a Home tab for uploading your own CSV, and a Summary tab.
 
 ## Running
 
@@ -74,6 +74,56 @@ every block has to hold both labels. A block with one label is scored at 100% by
 algorithm, so the app skips it and says so instead of reporting that as a result.
 Every condition is scored on the same number of datasets, the smallest count any of
 them has, and a condition with no usable block is left out with a warning.
+
+## Reading the results
+
+Every run reports, per condition and algorithm, the mean accuracy over the datasets
+you chose together with:
+
+- **Std. error**: the standard error of that mean across datasets
+  (`std / sqrt(n)`). It needs at least two datasets.
+- **Chance**: the accuracy of always predicting the majority class of a test set,
+  averaged over the datasets, about 0.5 on balanced blocks.
+- **Vs chance**: "not clearly above chance" when `mean - 2 * SE <= chance`.
+
+None of these change an accuracy; they sit beside it.
+
+### Dynamics-aware reference
+
+The sidebar has an off-by-default checkbox, "Include dynamics-aware reference (NN)".
+It adds one algorithm, `Dynamics (NN)` (`dynamics.py`), to the run. For each series and
+each embedding dimension d in 1, 2, 3 it builds delay vectors and predicts the next
+value from the one belonging to the nearest other vector. The mean absolute one-step
+error is low for a deterministic process and high when the order has been scrambled,
+and a random forest is trained on the three errors. It is a simple reference, fragile
+to observation noise, and not a proposed best method. With the checkbox off, a run is
+exactly what it was without this feature.
+
+### Gap
+
+When the reference was run, a table shows, per condition,
+
+```
+gap = accuracy(Dynamics (NN)) - best accuracy among Rocket, MiniRocket, catch22, DTW
+```
+
+worked out on each dataset and then averaged, with its standard error. fSFA is listed
+beside the gap but is not part of the maximum. A positive gap means a method that
+looks at the dynamics beats every shape or feature method on that problem.
+
+### Summary tab
+
+Collects, for every module run in this session, one row per condition: the mean
+accuracy of each algorithm, the chance level, and the gap. Run each module first (with
+the reference on to fill the gap). It can be downloaded as CSV. Results live in the
+session, so they are gone when the page is reloaded.
+
+## Tests
+
+```
+pip install pytest
+python -m pytest tests
+```
 
 ## Worth knowing
 
