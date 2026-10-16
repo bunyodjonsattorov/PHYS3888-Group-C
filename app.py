@@ -48,7 +48,7 @@ except ImportError:
     FSFA_AVAILABLE = False
 
 from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
-from ui import show_chart
+from ui import plain, show_chart, show_explanations
 from scoring import (gap_table, majority_class_accuracy, summary_rows,
                      uncertainty_table)
 
@@ -480,12 +480,12 @@ def show_gap(df_results):
     if gaps.empty:
         return
     st.subheader("↕️ Gap to the dynamics-aware reference")
-    st.dataframe(gaps.style.format({"Reference": "{:.1%}", "Best shape/feature": "{:.1%}",
-                                    "Gap": "{:+.1%}", "Gap SE": "{:.1%}", "fSFA": "{:.1%}"},
-                                   na_rep="–"), hide_index=True)
-    st.caption("Gap = the dynamics reference's accuracy minus the best of Rocket, MiniRocket, "
-               "catch22 and DTW on the same dataset, averaged over datasets (± its standard "
-               "error). fSFA is listed beside it, not included in that maximum.")
+    st.dataframe(plain(gaps).style.format(
+        {"Dynamics reference": "{:.1%}", "Best shape/feature method": "{:.1%}", "Gap": "{:+.1%}",
+         "Gap uncertainty (± std. error)": "{:.1%}", "fSFA": "{:.1%}"}, na_rep="–"),
+        hide_index=True)
+    st.caption("Gap = the dynamics reference minus the best shape or feature method, per "
+               "dataset, then averaged. fSFA is shown beside it, not included.")
 
 
 def show_results(df_results):
@@ -510,12 +510,11 @@ def show_results(df_results):
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📈 Performance Benchmarks Summary")
-        st.dataframe(summary.style.format({"Accuracy": "{:.2%}", "Time (s)": "{:.4f}s",
-                                           "Std. error": "{:.2%}", "Chance": "{:.1%}"}))
+        st.dataframe(plain(summary, mean_accuracy=True).style.format(
+            {"Mean accuracy": "{:.2%}", "Time (s)": "{:.4f}s",
+             "Uncertainty (± std. error)": "{:.2%}", "Chance level": "{:.1%}"}))
         st.caption(f"Mean over {basis}; each dataset is a block of up to 50 rows with "
-                   "its own train/test split. Chance is the accuracy of always guessing the "
-                   "test set's majority class. A result is 'not clearly above chance' when "
-                   "its mean minus twice its standard error does not exceed that.")
+                   "its own train/test split.")
 
     with col2:
         st.subheader("💡 Key Takeaways")
@@ -537,7 +536,8 @@ def show_results(df_results):
     show_gap(df_results)
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
-    st.dataframe(df_results)
+    st.dataframe(plain(df_results))
+    show_explanations()
 
 
 def render_benchmark(df, key, test_size, note=None, title=None):
@@ -630,14 +630,13 @@ def show_summary():
     rows = [row for title, results in stored.values() for row in summary_rows(title, results)]
     table = pd.DataFrame(rows)
     ordered = [name for name in (*ALGORITHMS, DYNAMICS) if name in table.columns]
-    table = table[["Module", "Condition", *ordered, "Chance", "Gap", "Gap SE", "Datasets"]]
-    formats = {name: "{:.1%}" for name in (*ordered, "Chance", "Gap SE")}
+    table = plain(table[["Module", "Condition", *ordered, "Chance", "Gap", "Gap SE", "Datasets"]])
+    formats = {name: "{:.1%}" for name in (*ordered, "Chance level", "Gap uncertainty (± std. error)")}
     formats["Gap"] = "{:+.1%}"
     st.dataframe(table.style.format(formats, na_rep="–"), hide_index=True)
-    st.caption("Mean accuracy over the datasets each run used. Chance is the majority-class "
-               "accuracy. Gap = dynamics reference minus the best of Rocket, MiniRocket, "
-               "catch22 and DTW, per dataset then averaged, ± its standard error; blank when "
-               "the reference was not run for that module.")
+    st.caption("Mean accuracy over the datasets each run used. The gap is blank when the "
+               "reference was not run for that module.")
+    show_explanations()
     st.download_button("Download summary as CSV", table.to_csv(index=False).encode(),
                        file_name="benchmark_summary.csv", mime="text/csv")
 
