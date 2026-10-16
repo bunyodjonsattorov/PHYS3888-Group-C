@@ -12,6 +12,7 @@ import importlib.util
 import io
 import sys
 import time
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -48,7 +49,7 @@ except ImportError:
     FSFA_AVAILABLE = False
 
 from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
-from ui import plain, show_chart, show_explanations
+from ui import plain, show_chart, show_explanations, show_problem
 from scoring import (gap_table, majority_class_accuracy, summary_rows,
                      uncertainty_table)
 
@@ -618,11 +619,65 @@ def render_benchmark(df, key, test_size, note=None, title=None):
         show_results(results)
 
 
-def show_summary():
+def run_all_modules(modules, test_size, max_datasets):
+    """Benchmark every module in turn behind one progress bar.
+
+    A module that cannot be loaded or that fails is reported and skipped, and the others
+    still run. Each finished module is saved to ``st.session_state`` straight away, so
+    stopping the run part way keeps what was done. Returns ``[(title, message, details)]``
+    for the modules that did not run.
+    """
+    algorithms = run_algorithms()
+    problems, jobs = [], []
+    for info in modules:
+        if info["error"]:
+            problems.append((info["title"], "its main.py could not be loaded", info["error"]))
+            continue
+        try:
+            datasets, _ = parse_uploaded_csv(module_frame(info))
+            datasets = {cond: found for cond, found in datasets.items() if found}
+            if not datasets:
+                raise ValueError("no 50-row block holds both labels")
+            jobs.append((info, datasets, min(max_datasets, min(len(f) for f in datasets.values()))))
+        except Exception as exc:
+            problems.append((info["title"], f"its data could not be prepared ({exc})",
+                             traceback.format_exc()))
+    total = sum(n * len(datasets) * len(algorithms) for _, datasets, n in jobs) or 1
+    bar = st.progress(0.0, text=f"Starting {len(jobs)} modules...")
+    done = 0
+    for position, (info, datasets, n) in enumerate(jobs, start=1):
+        steps = n * len(datasets) * len(algorithms)
+
+        def report(completed, _total, label, seconds, _done=done, _info=info, _position=position):
+            bar.progress(min((_done + completed) / total, 1.0),
+                         text=f"Module {_position} of {len(jobs)}: {_info['title']} · {label}")
+
+        try:
+            results = run_benchmark(datasets, n, test_size, on_progress=report, algorithms=algorithms)
+        except Exception as exc:
+            problems.append((info["title"], f"the benchmark stopped part way ({exc})",
+                             traceback.format_exc()))
+        else:
+            st.session_state.setdefault("summaries", {})[f"module:{info['name']}"] = (
+                info["title"], results)
+        done += steps
+    bar.progress(1.0, text=f"Finished {len(jobs)} module(s)" + (f", {len(problems)} skipped" if problems else ""))
+    return problems
+
+
+def show_summary(modules, test_size):
     """One row per module and condition from every benchmark run in this session."""
-    st.markdown("Run each module's benchmark in its own tab first; its results are collected "
-                "here. Turn on the dynamics-aware reference in the sidebar before running to "
-                "fill the Gap columns.")
+    st.markdown("Run each module's benchmark in its own tab, or run them all here; the "
+                "results are collected in the table below. Turn on the dynamics-aware "
+                "reference in the sidebar first to fill the Gap columns.")
+    usable = [m for m in modules if not m["error"]]
+    if active_algorithms() and usable:
+        per_module = st.slider("Datasets per module", 1, 10, 2, key="all:n",
+                               help="DTW on long series is slow: about 3 minutes per dataset "
+                                    "on the Fractal module. Start with 1 or 2.")
+        if st.button("Run all modules", type="primary", key="all:run"):
+            for title, message, details in run_all_modules(modules, test_size, per_module):
+                show_problem(f"{title} was skipped: {message}.", details)
     stored = st.session_state.get("summaries", {})
     if not stored:
         st.info("Nothing to summarise yet. Open a module tab and press **Execute Benchmark**.")
@@ -732,4 +787,4 @@ for info, tab in zip(modules, module_tabs):
         )
 
 with summary_tab:
-    show_summary()
+    show_summary(modules, test_size)
