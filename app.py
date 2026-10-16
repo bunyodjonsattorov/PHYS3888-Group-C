@@ -552,7 +552,7 @@ def show_results(df_results):
     st.dataframe(df_results)
 
 
-def render_benchmark(df, key, test_size, note=None):
+def render_benchmark(df, key, test_size, note=None, title=None):
     """Parse a CSV, then offer the dataset count and the big Execute Benchmark button."""
     datasets, report = parse_uploaded_csv(df)
     show_parse_report(report)
@@ -625,7 +625,33 @@ def render_benchmark(df, key, test_size, note=None):
             timing.caption(f"Elapsed {elapsed}.")
             status.update(label=f"Benchmark complete: {len(plan)} steps in {elapsed}",
                           state="complete")
+        # Kept for the Summary tab, which outlives the tab switch that clears this view.
+        st.session_state.setdefault("summaries", {})[key] = (title or "Uploaded CSV", results)
         show_results(results)
+
+
+def show_summary():
+    """One row per module and condition from every benchmark run in this session."""
+    st.markdown("Run each module's benchmark in its own tab first; its results are collected "
+                "here. Turn on the dynamics-aware reference in the sidebar before running to "
+                "fill the Gap columns.")
+    stored = st.session_state.get("summaries", {})
+    if not stored:
+        st.info("Nothing to summarise yet. Open a module tab and press **Execute Benchmark**.")
+        return
+    rows = [row for title, results in stored.values() for row in summary_rows(title, results)]
+    table = pd.DataFrame(rows)
+    ordered = [name for name in (*ALGORITHMS, DYNAMICS) if name in table.columns]
+    table = table[["Module", "Condition", *ordered, "Chance", "Gap", "Gap SE", "Datasets"]]
+    formats = {name: "{:.1%}" for name in (*ordered, "Chance", "Gap SE")}
+    formats["Gap"] = "{:+.1%}"
+    st.dataframe(table.style.format(formats, na_rep="–"), hide_index=True)
+    st.caption("Mean accuracy over the datasets each run used. Chance is the majority-class "
+               "accuracy. Gap = dynamics reference minus the best of Rocket, MiniRocket, "
+               "catch22 and DTW, per dataset then averaged, ± its standard error; blank when "
+               "the reference was not run for that module.")
+    st.download_button("Download summary as CSV", table.to_csv(index=False).encode(),
+                       file_name="benchmark_summary.csv", mime="text/csv")
 
 
 # ==========================================
@@ -671,7 +697,8 @@ time series, under each of the conditions that module defines.
 
 modules = [describe_module(found) for found in discover_modules()]
 
-home_tab, *module_tabs = st.tabs(["Home"] + [m["title"] for m in modules])
+home_tab, *module_tabs, summary_tab = st.tabs(
+    ["Home"] + [m["title"] for m in modules] + ["Summary"])
 
 with home_tab:
     st.markdown("### Modules", anchors=False)
@@ -714,4 +741,8 @@ for info, tab in zip(modules, module_tabs):
         render_benchmark(
             frame, key=f"module:{info['name']}", test_size=test_size,
             note=f"`modules/{info['name']}/{CSV_NAME}` · {len(frame)} rows × {frame.shape[1]} columns",
+            title=info["title"],
         )
+
+with summary_tab:
+    show_summary()
