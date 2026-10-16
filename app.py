@@ -48,6 +48,8 @@ except ImportError:
     FSFA_AVAILABLE = False
 
 from dynamics import NAME as DYNAMICS, evaluate_dynamics   # numpy + scikit-learn only
+from scoring import (gap_table, majority_class_accuracy, summary_rows,
+                     uncertainty_table)
 
 MODULES_DIR = Path(__file__).resolve().parent / "modules"
 CSV_NAME = "data.csv"
@@ -407,7 +409,8 @@ def run_benchmark(data_by_condition, num_datasets, test_size, on_progress=None,
                     on_progress(completed, total, step, None)
                 acc, elapsed = runners[name]()
                 results.append({"Dataset": i + 1, "Condition": condition,
-                                "Algorithm": name, "Accuracy": acc, "Time (s)": elapsed})
+                                "Algorithm": name, "Accuracy": acc, "Time (s)": elapsed,
+                                "Chance": majority_class_accuracy(y_test)})
                 completed += 1
                 if on_progress is not None:
                     on_progress(completed, total, step, elapsed)
@@ -470,6 +473,20 @@ def make_progress_reporter(plan, bar, timing, started):
     return report
 
 
+def show_accuracy_chart(summary):
+    """Mean accuracy per algorithm with +/- 1 SE bars and the chance level, one panel per condition."""
+    import altair as alt
+    data = summary.assign(Low=lambda d: d["Accuracy"] - d["Std. error"].fillna(0),
+                          High=lambda d: d["Accuracy"] + d["Std. error"].fillna(0))
+    base = alt.Chart(data).encode(x=alt.X("Algorithm:N", sort=None, title=None))
+    bars = base.mark_bar().encode(y=alt.Y("Accuracy:Q", scale=alt.Scale(domain=[0, 1])))
+    errors = base.mark_errorbar().encode(y=alt.Y("Low:Q", title="Accuracy"), y2="High:Q")
+    chance = base.mark_tick(color="red", thickness=2, size=40).encode(y="Chance:Q")
+    st.altair_chart(alt.layer(bars, errors, chance).facet(
+        facet=alt.Facet("Condition:N", sort=None, title=None), columns=3))
+    st.caption("Bars are the mean accuracy, whiskers one standard error, the red tick the chance level.")
+
+
 def show_results(df_results):
     # Every figure below is a mean over the datasets the user chose to evaluate,
     # never a single train/test split, so the winner is decided on that average.
@@ -481,15 +498,21 @@ def show_results(df_results):
                .groupby(["Condition", "Algorithm"], observed=True)[["Accuracy", "Time (s)"]]
                .mean().reset_index())
     summary["Condition"] = summary["Condition"].astype(str)
+    # Extra columns only: the standard error across datasets, the chance level and
+    # whether the mean clears it. The accuracy and time columns are left untouched.
+    summary = summary.merge(uncertainty_table(df_results), on=["Condition", "Algorithm"], how="left")
     n_datasets = int(df_results["Dataset"].nunique())
     basis = "1 dataset" if n_datasets == 1 else f"{n_datasets} datasets"
 
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📈 Performance Benchmarks Summary")
-        st.dataframe(summary.style.format({"Accuracy": "{:.2%}", "Time (s)": "{:.4f}s"}))
+        st.dataframe(summary.style.format({"Accuracy": "{:.2%}", "Time (s)": "{:.4f}s",
+                                           "Std. error": "{:.2%}", "Chance": "{:.1%}"}))
         st.caption(f"Mean over {basis}; each dataset is a block of up to 50 rows with "
-                   "its own train/test split.")
+                   "its own train/test split. Chance is the accuracy of always guessing the "
+                   "test set's majority class. A result is 'not clearly above chance' when "
+                   "its mean minus twice its standard error does not exceed that.")
 
     with col2:
         st.subheader("💡 Key Takeaways")
@@ -507,6 +530,8 @@ def show_results(df_results):
                     names = ", ".join(f"**{a}**" for a in top[:-1]) + f" and **{top[-1]}**"
                     st.write(f"🔹 Over {basis}, {names} tied at the top on **{cond}** at "
                              f"**{best_acc:.1%}** accuracy.")
+
+    show_accuracy_chart(summary)
 
     st.subheader("📊 Granular Dataset Evaluation Matrix")
     st.dataframe(df_results)
